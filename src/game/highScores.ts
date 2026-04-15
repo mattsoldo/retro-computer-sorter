@@ -12,8 +12,8 @@ const PRELOADED: HighScoreEntry[] = [
   { name: 'MEGAMAN',  score:   498_750, date: '1987-12-17' },
   { name: 'KIRBY',    score:   387_600, date: '1992-04-27' },
   { name: 'PIKACHU',  score:   276_400, date: '1996-02-27' },
-  { name: 'YOSHI',    score:   165_300, date: '1990-11-21' },
-  { name: 'TOAD',     score:    54_200, date: '1985-10-18' },
+  { name: 'YOSHI',    score:     5_000, date: '1990-11-21' },
+  { name: 'TOAD',     score:       500, date: '1985-10-18' },
 ];
 
 export function loadHighScores(): HighScoreEntry[] {
