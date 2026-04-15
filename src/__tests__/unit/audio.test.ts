@@ -36,8 +36,11 @@ describe('audio speech synthesis', () => {
     vi.useFakeTimers();
 
     const voices = [
+      { name: 'Daniel', lang: 'en-GB' } as SpeechSynthesisVoice,
       { name: 'Alex', lang: 'en-US' } as SpeechSynthesisVoice,
       { name: 'Google UK English Male', lang: 'en-GB' } as SpeechSynthesisVoice,
+      { name: 'Microsoft David', lang: 'en-US' } as SpeechSynthesisVoice,
+      { name: 'Victoria', lang: 'en-US' } as SpeechSynthesisVoice,
     ];
     const speechSynthesis = {
       cancel: vi.fn(),
@@ -74,6 +77,9 @@ describe('audio speech synthesis', () => {
     const utterance = vi.mocked(synth.speak).mock.calls[0][0] as MockUtterance;
     expect(utterance.text).toBe('forty-two');
     expect(utterance.lang).toBe('en-US');
+    expect(utterance.rate).toBe(0.98);
+    expect(utterance.pitch).toBe(0.06);
+    expect(utterance.voice?.name).toBe('Microsoft David');
   });
 
   it('cancels and retries on the next tick when replacing active speech', async () => {
@@ -90,7 +96,10 @@ describe('audio speech synthesis', () => {
 
     expect(synth.speak).toHaveBeenCalledTimes(1);
     const utterance = vi.mocked(synth.speak).mock.calls[0][0] as MockUtterance;
-    expect(utterance.text).toContain('4,096 was the number of bytes of RAM in the Apple II.');
+    expect(utterance.text).toBe('Apple II. 4,096 bytes of RAM.');
     expect(utterance.lang).toBeTruthy();
+    expect(utterance.rate).toBe(1.16);
+    expect(utterance.pitch).toBe(0.05);
+    expect(utterance.voice?.name).toBe('Microsoft David');
   });
 });

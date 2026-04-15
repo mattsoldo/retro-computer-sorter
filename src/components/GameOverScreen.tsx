@@ -135,6 +135,7 @@ interface Props {
 type Phase = 'announce' | 'credits' | 'scores';
 
 const CREDITS_SCROLL_SPEED = 1.2; // px per frame at 60fps
+const ANNOUNCE_WATCHDOG_MS = 8000;
 
 export default function GameOverScreen({ score, bins, sortedItems, onPlay, onBack }: Props) {
   const [phase, setPhase] = useState<Phase>('announce');
@@ -182,13 +183,12 @@ export default function GameOverScreen({ score, bins, sortedItems, onPlay, onBac
 
     speakText(label, advance);
 
-    // Fallback: advance after estimated speech duration in case onend never fires
-    const estimatedMs = Math.max(1800, label.split(' ').length * 900);
-    const fallback = setTimeout(advance, estimatedMs);
+    // Watchdog only: if a browser never fires speech end events, fail open after a long pause.
+    const watchdog = setTimeout(advance, ANNOUNCE_WATCHDOG_MS);
 
     return () => {
       cancelled = true;
-      clearTimeout(fallback);
+      clearTimeout(watchdog);
       window.speechSynthesis?.cancel();
     };
   }, [phase, announceStep, announceSegments]);

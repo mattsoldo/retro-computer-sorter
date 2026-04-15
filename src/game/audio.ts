@@ -83,23 +83,61 @@ export function playUnlock() {
 
 // ────────────────────── Text-to-speech ──────────────────────
 
-// Pool of up to 4 diverse English voices — rotated on each speakSpec call
-// so items are announced by a different "operator" every time.
+// Single fixed voice selection, tuned toward a flat early-80s computer read.
 const PREFERRED_VOICES = [
-  'Microsoft David',         // Windows — deep male
-  'Alex',                    // macOS — clear neutral male
-  'Google UK English Male',  // Chrome — British male
-  'Daniel',                  // macOS — British male
-  'Microsoft Mark',          // Windows — male alt
-  'Microsoft Zira',          // Windows — female contrast
-  'Samantha',                // macOS — female contrast
-  'Victoria',                // macOS — different female
-  'Google US English',       // Chrome fallback
+  'Microsoft David',
+  'Google UK English Male',
+  'Alex',
+  'Microsoft Mark',
+  'Google US English',
 ];
 
-let voicePool: SpeechSynthesisVoice[] = [];
-let voicePoolReady = false;
-let voiceIndex = 0;
+const DISALLOWED_VOICE_MATCHES = [
+  'Daniel',
+  'Samantha',
+  'Victoria',
+  'Karen',
+  'Moira',
+  'Tessa',
+];
+
+const SYNTHETIC_VOICE_MATCHES = [
+  'Microsoft',
+  'Google',
+  'Alex',
+  'Fred',
+  'Mark',
+  'David',
+];
+
+const COMPUTER_VOICE_RATE = 0.98;
+const COMPUTER_VOICE_PITCH = 0.06;
+const COMPUTER_SPEC_RATE = 1.16;
+const COMPUTER_SPEC_PITCH = 0.05;
+
+function isDisallowedVoice(voice: SpeechSynthesisVoice): boolean {
+  return DISALLOWED_VOICE_MATCHES.some(name => voice.name.includes(name));
+}
+
+function isSyntheticPreferredVoice(voice: SpeechSynthesisVoice): boolean {
+  return SYNTHETIC_VOICE_MATCHES.some(name => voice.name.includes(name));
+}
+
+function normalizeSpeechLabel(speech: string): string {
+  return speech
+    .replace(/^number of\s+/i, '')
+    .replace(/^amount of\s+/i, '')
+    .replace(/^size of\s+/i, '')
+    .trim();
+}
+
+function buildSpecText(spec: number, name: string, speech: string): string {
+  const label = normalizeSpeechLabel(speech);
+  return `${name}. ${spec.toLocaleString()} ${label}.`;
+}
+
+let operatorPoolReady = false;
+let computerVoice: SpeechSynthesisVoice | null = null;
 let pendingSpecAnnouncement: { spec: number; name: string; speech: string } | null = null;
 
 function getSpeechSynthesis(): SpeechSynthesis | null {
@@ -113,21 +151,34 @@ function buildVoicePool(): void {
   const voices = synth.getVoices();
   if (voices.length === 0) return;
 
-  const found: SpeechSynthesisVoice[] = [];
+  const allowedVoices = voices.filter(voice => !isDisallowedVoice(voice));
   for (const name of PREFERRED_VOICES) {
-    const v = voices.find(v => v.name.includes(name));
-    if (v && !found.find(f => f.name === v.name)) {
-      found.push(v);
-      if (found.length >= 4) break;
+    const match = allowedVoices.find(voice => voice.name.includes(name));
+    if (match) {
+      computerVoice = match;
+      operatorPoolReady = true;
+      return;
     }
   }
-  // Pad with English voices if fewer than 4 preferred voices are available
-  if (found.length < 4) {
-    const extras = voices.filter(v => v.lang.startsWith('en') && !found.find(f => f.name === v.name));
-    found.push(...extras.slice(0, 4 - found.length));
+
+  const syntheticFallback = allowedVoices.find(voice =>
+    voice.lang.startsWith('en') && isSyntheticPreferredVoice(voice)
+  );
+  if (syntheticFallback) {
+    computerVoice = syntheticFallback;
+    operatorPoolReady = true;
+    return;
   }
-  voicePool = found;
-  voicePoolReady = true;
+
+  const englishFallback = allowedVoices.find(voice => voice.lang.startsWith('en'));
+  if (englishFallback) {
+    computerVoice = englishFallback;
+    operatorPoolReady = true;
+    return;
+  }
+
+  computerVoice = allowedVoices[0] ?? null;
+  operatorPoolReady = true;
 }
 
 function prepareSpeechSynthesis(): SpeechSynthesis | null {
@@ -138,14 +189,14 @@ function prepareSpeechSynthesis(): SpeechSynthesis | null {
   } catch {
     /* ignore */
   }
-  if (!voicePoolReady) buildVoicePool();
+  if (!operatorPoolReady) buildVoicePool();
   return synth;
 }
 
-function configureUtterance(utterance: SpeechSynthesisUtterance, voice: SpeechSynthesisVoice | null): void {
-  if (voice) {
-    utterance.voice = voice;
-    utterance.lang = voice.lang;
+function configureUtterance(utterance: SpeechSynthesisUtterance): void {
+  if (computerVoice) {
+    utterance.voice = computerVoice;
+    utterance.lang = computerVoice.lang;
     return;
   }
   utterance.lang = 'en-US';
@@ -171,25 +222,15 @@ function flushPendingSpecAnnouncement(): void {
   speakSpec(next.spec, next.name, next.speech);
 }
 
-/** Returns the next voice in the pool (round-robin) for item announcements. */
-function getNextVoice(): SpeechSynthesisVoice | null {
-  if (!voicePoolReady) buildVoicePool();
-  if (voicePool.length === 0) return null;
-  const voice = voicePool[voiceIndex % voicePool.length];
-  voiceIndex++;
-  return voice;
+function getComputerVoice(): SpeechSynthesisVoice | null {
+  if (!operatorPoolReady) buildVoicePool();
+  return computerVoice;
 }
 
-/** Returns the "primary" retro voice (first in pool) for dramatic reads. */
-function getPrimaryVoice(): SpeechSynthesisVoice | null {
-  if (!voicePoolReady) buildVoicePool();
-  return voicePool[0] ?? null;
-}
-
-// Prime pool when voices asynchronously become available (Chrome requirement)
+// Prime voice cache when voices asynchronously become available (Chrome requirement)
 if (typeof window !== 'undefined' && window.speechSynthesis) {
   window.speechSynthesis.onvoiceschanged = () => {
-    voicePoolReady = false;
+    operatorPoolReady = false;
     buildVoicePool();
     flushPendingSpecAnnouncement();
   };
@@ -206,11 +247,11 @@ export function speakText(text: string, onEnd?: () => void) {
       return;
     }
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.pitch = 0.1;
-    utterance.rate = 0.72;
+    utterance.pitch = COMPUTER_VOICE_PITCH;
+    utterance.rate = COMPUTER_VOICE_RATE;
     utterance.volume = 0.9;
-    const voice = getPrimaryVoice();
-    configureUtterance(utterance, voice);
+    getComputerVoice();
+    configureUtterance(utterance);
     if (onEnd) utterance.onend = () => onEnd();
     if (onEnd) utterance.onerror = () => onEnd();
     speakUtterance(synth, utterance);
@@ -228,35 +269,31 @@ export function speakFinalNumber(n: number) {
     const utterance = new SpeechSynthesisUtterance(
       `Your sorting work created the number ${n.toLocaleString()}.`
     );
-    utterance.pitch = 0.1;
-    utterance.rate = 0.75;
+    utterance.pitch = COMPUTER_VOICE_PITCH;
+    utterance.rate = COMPUTER_VOICE_RATE;
     utterance.volume = 0.9;
-    const voice = getPrimaryVoice();
-    configureUtterance(utterance, voice);
+    getComputerVoice();
+    configureUtterance(utterance);
     speakUtterance(synth, utterance, true);
   } catch {
     /* silently fail */
   }
 }
 
-/** Speak the spec in a retro-computer voice, rotating through the voice pool
- *  so each item is announced by a different "operator".
- *  Pattern: "[spec] was the [speech] in the [name]." */
+/** Speak the spec in the same computer voice, but faster so it finishes during the fall. */
 export function speakSpec(spec: number, name: string, speech: string) {
   try {
     const synth = prepareSpeechSynthesis();
     if (!synth) return;
     pendingSpecAnnouncement = { spec, name, speech };
-    if (!voicePoolReady && synth.getVoices().length === 0) return;
+    if (!operatorPoolReady && synth.getVoices().length === 0) return;
     synth.cancel();
-    const utterance = new SpeechSynthesisUtterance(
-      `${spec.toLocaleString()} was the ${speech} in the ${name}.`
-    );
-    utterance.pitch = 0.1;
-    utterance.rate = 0.75;
+    const utterance = new SpeechSynthesisUtterance(buildSpecText(spec, name, speech));
+    utterance.pitch = COMPUTER_SPEC_PITCH;
+    utterance.rate = COMPUTER_SPEC_RATE;
     utterance.volume = 0.9;
-    const voice = getNextVoice();
-    configureUtterance(utterance, voice);
+    getComputerVoice();
+    configureUtterance(utterance);
     speakUtterance(synth, utterance, true);
     pendingSpecAnnouncement = null;
   } catch {
