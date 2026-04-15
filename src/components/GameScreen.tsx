@@ -3,7 +3,7 @@ import {
   createInitialState, spawnObject, tick, moveLeft, moveRight,
   setFastDrop, getUnlockedBinsSorted,
 } from '../game/gameEngine';
-import type { GameState, RetroObject } from '../game/types';
+import type { GameState, RetroObject, BinState, SortedItemRecord } from '../game/types';
 import {
   CANVAS_WIDTH, CANVAS_HEIGHT, OBJECT_SIZE,
   FALL_AREA_HEIGHT, BIN_DEFINITIONS, CATEGORY_COLORS,
@@ -15,7 +15,7 @@ import {
 } from '../game/audio';
 
 interface Props {
-  onGameOver: (score: number) => void;
+  onGameOver: (score: number, bins: BinState[], sortedItems: SortedItemRecord[]) => void;
   onQuit: () => void;
 }
 
@@ -402,7 +402,9 @@ export default function GameScreen({ onGameOver, onQuit }: Props) {
       // Game over
       if (next.status === 'gameOver' && prev.status !== 'gameOver') {
         playGameOver();
-        setTimeout(() => onGameOver(next.score), 1200);
+        const finalBins = [...next.bins];
+        const finalSorted = [...next.sortedItems];
+        setTimeout(() => onGameOver(next.score, finalBins, finalSorted), 1200);
       }
 
       // Spawn next object if needed (small delay for flash)
@@ -558,8 +560,8 @@ export default function GameScreen({ onGameOver, onQuit }: Props) {
                 }}
                 aria-label={`${b.label} bin, count ${b.count}`}
               >
-                <div className="bin-digit">{b.count}</div>
                 <div className="bin-place-label">{def.placeLabel}</div>
+                <div className="bin-digit">{b.count}</div>
                 <div className="bin-short">{b.label}</div>
                 {b.count > 0 && (
                   <div className="bin-icons" aria-hidden="true">

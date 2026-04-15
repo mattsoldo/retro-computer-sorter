@@ -107,6 +107,26 @@ if (typeof window !== 'undefined' && window.speechSynthesis) {
   };
 }
 
+/** Speak the final number formed by the bin counts at game over.
+ *  Pattern: "Your sorting work created the number [N]." */
+export function speakFinalNumber(n: number) {
+  try {
+    if (typeof window === 'undefined' || !window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(
+      `Your sorting work created the number ${n.toLocaleString()}.`
+    );
+    utterance.pitch = 0.1;
+    utterance.rate = 0.75;
+    utterance.volume = 0.9;
+    const voice = getRetroVoice();
+    if (voice) utterance.voice = voice;
+    window.speechSynthesis.speak(utterance);
+  } catch {
+    /* silently fail */
+  }
+}
+
 /** Speak the spec in a low, slow retro-computer voice.
  *  Pattern: "[spec] was the [speech] in the [name]."
  *  e.g. "2,300 was the number of transistors in the Intel 4004 CPU." */

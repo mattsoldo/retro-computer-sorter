@@ -22,6 +22,11 @@ export interface RetroObject {
   imageUrl?: string;     // Wikimedia Commons image for the spec panel
 }
 
+export interface SortedItemRecord {
+  object: RetroObject;
+  bin: PlaceValueBin;
+}
+
 export interface FallingObject {
   object: RetroObject;
   column: number;        // 0 = leftmost active bin column
@@ -59,4 +64,5 @@ export interface GameState {
   currentObject: FallingObject | null;
   lastDropResult: 'correct' | 'wrong' | null;
   lastDropTimer: number; // frames since last drop (for flash)
+  sortedItems: SortedItemRecord[]; // correctly-placed items in order
 }
