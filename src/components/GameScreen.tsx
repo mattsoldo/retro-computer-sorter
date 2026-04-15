@@ -11,6 +11,7 @@ import {
 import { formatSpec } from '../game/placeValue';
 import {
   playCorrect, playWrong, playCombo, playLevelUp, playGameOver, playUnlock, unlockAudio,
+  speakSpec,
 } from '../game/audio';
 
 interface Props {
@@ -195,7 +196,16 @@ function drawFallingObject(
   ctx.fillRect(x + 3, y + 3, OBJECT_SIZE - 6, 4);
 
   // Icon
-  drawCategoryIcon(ctx, cx, y + OBJECT_SIZE / 2 - 6, obj.category);
+  drawCategoryIcon(ctx, cx, y + 18, obj.category);
+
+  // Main sortable number
+  ctx.fillStyle = '#000';
+  ctx.font = 'bold 10px "Press Start 2P", monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const value = formatSpec(obj.spec);
+  const compactValue = value.length > 8 ? `${Math.round(obj.spec / 1000)}K` : value;
+  ctx.fillText(compactValue, cx, y + 44);
 
   // Name below (truncated if needed)
   ctx.fillStyle = '#000';
@@ -203,32 +213,41 @@ function drawFallingObject(
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
   const name = obj.name.length > 14 ? obj.name.slice(0, 13) + '…' : obj.name;
-  ctx.fillText(name, cx, y + OBJECT_SIZE - 14);
+  ctx.fillText(name, cx, y + OBJECT_SIZE - 12);
 }
 
 // ────────────────────── GameScreen component ──────────────────────
 
+interface CardItem {
+  obj: RetroObject;
+  factoidText: string | null;
+}
+
 export default function GameScreen({ onGameOver, onQuit }: Props) {
+  const [displayState, setDisplayState] = useState<GameState>(() => createInitialState());
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const starsRef = useRef<Star[]>(generateStars(90));
-  const gameStateRef = useRef<GameState>(createInitialState());
-  const [displayState, setDisplayState] = useState<GameState>(gameStateRef.current);
+  const gameStateRef = useRef<GameState>(displayState);
   const recentIdsRef = useRef<string[]>([]);
   const keysRef = useRef({ left: false, right: false, down: false });
   const frameCountRef = useRef(0);
   const lastMoveFrameRef = useRef<{ left: number; right: number }>({ left: -999, right: -999 });
-  const prevCorrectRef = useRef(0);
   const prevUnlockedCountRef = useRef(
-    getUnlockedBinsSorted(gameStateRef.current).length,
+    getUnlockedBinsSorted(displayState).length,
   );
   const prevLevelRef = useRef(1);
   const [overlayText, setOverlayText] = useState<{ text: string; kind: 'correct' | 'wrong'; id: number } | null>(null);
-  const [factoid, setFactoid] = useState<{ text: string; id: number } | null>(null);
+  const [cardItem, setCardItem] = useState<CardItem | null>(null);
 
   // Spawn initial object
   useEffect(() => {
     if (!gameStateRef.current.currentObject) {
       gameStateRef.current = spawnObject(gameStateRef.current, recentIdsRef.current);
+      const obj = gameStateRef.current.currentObject?.object;
+      if (obj) {
+        setCardItem({ obj, factoidText: null });
+        speakSpec(obj.specLabel, obj.name, obj.year);
+      }
       setDisplayState({ ...gameStateRef.current });
     }
   }, []);
@@ -239,8 +258,15 @@ export default function GameScreen({ onGameOver, onQuit }: Props) {
       if (['ArrowLeft', 'ArrowRight', 'ArrowDown', ' '].includes(e.key)) {
         e.preventDefault();
       }
+
+      // Skip spawn delay: any arrow key during the inter-object pause triggers immediate spawn
+      if (['ArrowLeft', 'ArrowRight', 'ArrowDown'].includes(e.key)) {
+        if (!gameStateRef.current.currentObject && gameStateRef.current.lastDropTimer > 0) {
+          gameStateRef.current = { ...gameStateRef.current, lastDropTimer: 0 };
+        }
+      }
+
       if (e.key === 'ArrowLeft') {
-        // Move immediately if not already held (avoids browser auto-repeat double-move)
         if (!keysRef.current.left) {
           gameStateRef.current = moveLeft(gameStateRef.current);
           lastMoveFrameRef.current.left = frameCountRef.current;
@@ -309,21 +335,22 @@ export default function GameScreen({ onGameOver, onQuit }: Props) {
 
       // Landing detection — prev had currentObject, next does not
       if (prev.currentObject && !next.currentObject) {
+        const landedObj = prev.currentObject.object;
         // Track recent ids (keep last 3)
-        const justLandedId = prev.currentObject.object.id;
-        recentIdsRef.current = [justLandedId, ...recentIdsRef.current].slice(0, 3);
+        recentIdsRef.current = [landedObj.id, ...recentIdsRef.current].slice(0, 3);
 
         if (next.lastDropResult === 'correct') {
           playCorrect();
           if (next.combo >= 2) playCombo(next.combo);
-          const num = formatSpec(prev.currentObject.object.spec);
-          const digit = num.charAt(0);
+          const num = formatSpec(landedObj.spec);
+          const placeValue = landedObj.placeValue.toUpperCase();
           setOverlayText({
-            text: `CORRECT! ${num} starts with ${digit}`,
+            text: `CORRECT! ${num} → ${placeValue}`,
             kind: 'correct',
             id: Date.now(),
           });
-          setFactoid({ text: prev.currentObject.object.factoid, id: Date.now() });
+          // Show factoid on the item card
+          setCardItem({ obj: landedObj, factoidText: landedObj.factoid });
         } else {
           playWrong();
           setOverlayText({ text: 'TRY AGAIN!', kind: 'wrong', id: Date.now() });
@@ -348,17 +375,20 @@ export default function GameScreen({ onGameOver, onQuit }: Props) {
         prevLevelRef.current = next.level;
       }
 
-      prevCorrectRef.current = next.totalCorrect;
-
       // Game over
       if (next.status === 'gameOver' && prev.status !== 'gameOver') {
         playGameOver();
-        setTimeout(() => onGameOver(next.score), 1400);
+        setTimeout(() => onGameOver(next.score), 1200);
       }
 
       // Spawn next object if needed (small delay for flash)
       if (!next.currentObject && next.status === 'playing' && next.lastDropTimer <= 30) {
         gameStateRef.current = spawnObject(next, recentIdsRef.current);
+        const newObj = gameStateRef.current.currentObject?.object;
+        if (newObj) {
+          setCardItem({ obj: newObj, factoidText: null });
+          speakSpec(newObj.specLabel, newObj.name, newObj.year);
+        }
       }
 
       // Render
@@ -396,135 +426,123 @@ export default function GameScreen({ onGameOver, onQuit }: Props) {
     return () => clearTimeout(t);
   }, [overlayText]);
 
-  // Auto-clear factoid
-  useEffect(() => {
-    if (!factoid) return;
-    const t = setTimeout(() => setFactoid(null), 2600);
-    return () => clearTimeout(t);
-  }, [factoid]);
-
   const handleUnlock = useCallback(() => unlockAudio(), []);
 
-  const currentObj = displayState.currentObject?.object;
   const heartsFilled = '♥'.repeat(Math.max(0, displayState.lives));
   const heartsEmpty  = '♡'.repeat(Math.max(0, 3 - displayState.lives));
 
-  // Largest place value on the left, matching positional notation and the canvas column order
-  const allBinsInOrder = useMemo(() => {
-    const ORDER: (keyof typeof BIN_DEFINITIONS)[] = [
-      'millions','hundred-thousands','ten-thousands','thousands','hundreds','tens','ones',
-    ];
-    return ORDER.map(pv => {
-      return displayState.bins.find(b => b.placeValue === pv)!;
-    });
-  }, [displayState.bins]);
-
-  // Which sorted (unlocked) index is currently targeted?
+  // Unlocked bins in display order (millions → ones), used for the bin row
   const sortedUnlocked = useMemo(() => getUnlockedBinsSorted(displayState), [displayState]);
+
+  // Target place value for active-target highlight
   const targetPlaceValue = displayState.currentObject
     ? sortedUnlocked[displayState.currentObject.column]?.placeValue
     : null;
 
   return (
     <div className="game-screen" onPointerDown={handleUnlock}>
-      <div className="hud">
-        <div className="hud-item">
-          <span className="hud-label">SCORE</span>
-          <span className="hud-value">{displayState.score.toLocaleString()}</span>
-        </div>
-        <div className="hud-item">
-          <span className="hud-label">LIVES</span>
-          <span className="hud-value lives">{heartsFilled}{heartsEmpty}</span>
-        </div>
-        <div className="hud-item">
-          <span className="hud-label">LEVEL</span>
-          <span className="hud-value">{displayState.level}</span>
-        </div>
-        <div className="hud-item">
-          <span className="hud-label">COMBO</span>
-          <span className="hud-value combo">
-            {displayState.combo >= 2 ? `x${displayState.combo}!` : '—'}
-          </span>
-        </div>
+
+      {/* ── Left: item card ── */}
+      <div className="item-card" aria-live="polite">
+        {cardItem ? (
+          <>
+            <div className="card-instruction">SORT THIS NUMBER</div>
+            <div className="card-spec-number">{formatSpec(cardItem.obj.spec)}</div>
+            <div className="card-spec-label">{cardItem.obj.specLabel}</div>
+            {cardItem.obj.imageUrl && (
+              <img
+                key={cardItem.obj.id}
+                src={cardItem.obj.imageUrl}
+                alt={cardItem.obj.name}
+                className="card-img"
+                onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+              />
+            )}
+            <div className="card-device-name">{cardItem.obj.name} ({cardItem.obj.year})</div>
+            {cardItem.factoidText && (
+              <div className="card-factoid">{cardItem.factoidText}</div>
+            )}
+          </>
+        ) : (
+          <div className="card-waiting">LOADING...</div>
+        )}
       </div>
 
-      <div className="spec-panel" aria-live="polite">
-        <div className="spec-panel-info">
-          <div className="spec-instruction">SORT THIS NUMBER INTO THE RIGHT PLACE VALUE BIN</div>
-          <div className="spec-number">
-            {currentObj ? formatSpec(currentObj.spec) : '...'}
+      {/* ── Right: game main area ── */}
+      <div className="game-main">
+        <div className="hud">
+          <div className="hud-item">
+            <span className="hud-label">SCORE</span>
+            <span className="hud-value">{displayState.score.toLocaleString()}</span>
           </div>
-          <div className="spec-label">
-            {currentObj ? `${currentObj.specLabel} — ${currentObj.name} (${currentObj.year})` : ''}
+          <div className="hud-item">
+            <span className="hud-label">LIVES</span>
+            <span className="hud-value lives">{heartsFilled}{heartsEmpty}</span>
+          </div>
+          <div className="hud-item">
+            <span className="hud-label">LEVEL</span>
+            <span className="hud-value">{displayState.level}</span>
+          </div>
+          <div className="hud-item">
+            <span className="hud-label">COMBO</span>
+            <span className="hud-value combo">
+              {displayState.combo >= 2 ? `x${displayState.combo}!` : '—'}
+            </span>
           </div>
         </div>
-        {currentObj?.imageUrl && (
-          <img
-            key={currentObj.id}
-            src={currentObj.imageUrl}
-            alt={currentObj.name}
-            className="spec-device-img"
-            onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+
+        <div className="canvas-wrap">
+          <canvas
+            ref={canvasRef}
+            width={CANVAS_WIDTH}
+            height={CANVAS_HEIGHT}
+            aria-label="Game play area"
           />
-        )}
-      </div>
-
-      <div className="canvas-wrap">
-        <canvas
-          ref={canvasRef}
-          width={CANVAS_WIDTH}
-          height={CANVAS_HEIGHT}
-          aria-label="Game play area"
-        />
-        {overlayText && (
-          <div key={`ov-${overlayText.id}`} className={`canvas-overlay ${overlayText.kind}`}>
-            {overlayText.text}
-          </div>
-        )}
-        {factoid && (
-          <div key={`fct-${factoid.id}`} className="factoid-overlay">
-            {factoid.text}
-          </div>
-        )}
-      </div>
-
-      <div className="bins">
-        {allBinsInOrder.map(b => {
-          const def = BIN_DEFINITIONS[b.placeValue];
-          const isTarget = b.placeValue === targetPlaceValue;
-          const flash = b.flashTimer && b.flashTimer > 0
-            ? (b.lastResult === 'correct' ? 'flash-correct' : 'flash-wrong')
-            : '';
-          const locked = !b.unlocked;
-          return (
-            <div
-              key={b.placeValue}
-              className={`bin ${locked ? 'locked' : ''} ${flash} ${isTarget ? 'active-target' : ''}`}
-              style={!locked ? {
-                background: def.color,
-                color: def.textColor,
-                borderColor: def.textColor,
-              } : undefined}
-              aria-label={`${b.label} bin ${locked ? '(locked)' : ''}`}
-            >
-              <div className="bin-short">
-                {locked ? '🔒' : b.shortLabel}
-              </div>
-              <div className="bin-range">{locked ? '???' : b.range}</div>
-              <div className="bin-count">{locked ? '' : `x${b.count}`}</div>
+          {overlayText && (
+            <div key={`ov-${overlayText.id}`} className={`canvas-overlay ${overlayText.kind}`}>
+              {overlayText.text}
             </div>
-          );
-        })}
-      </div>
+          )}
+        </div>
 
-      <div className="quit-row">
-        <span>← → to steer · ↓ fast drop · ESC to quit</span>
-        <button
-          onClick={onQuit}
-          style={{ fontFamily: 'VT323, monospace', fontSize: '1rem', color: '#888' }}
-        >
-          QUIT
-        </button>
+        {/* Bin row — only unlocked bins, displayed as a positional number */}
+        <div className="bins">
+          {sortedUnlocked.map((b, idx) => {
+            const def = BIN_DEFINITIONS[b.placeValue];
+            const isTarget = b.placeValue === targetPlaceValue;
+            const flash = b.flashTimer && b.flashTimer > 0
+              ? (b.lastResult === 'correct' ? 'flash-correct' : 'flash-wrong')
+              : '';
+            // Show comma after 'thousands' and 'millions' bins (if there are more bins to the right)
+            const showComma = (b.placeValue === 'thousands' || b.placeValue === 'millions')
+              && idx < sortedUnlocked.length - 1;
+            return (
+              <div
+                key={b.placeValue}
+                className={`bin ${flash} ${isTarget ? 'active-target' : ''} ${showComma ? 'bin-after-comma' : ''}`}
+                style={{
+                  background: def.color,
+                  color: def.textColor,
+                  borderColor: def.textColor,
+                }}
+                aria-label={`${b.label} bin, count ${b.count}`}
+              >
+                <div className="bin-digit">{b.count}</div>
+                <div className="bin-short">{b.shortLabel}</div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="quit-row">
+          <span>← → steer · ↓ fast drop · any key skips pause · ESC quit</span>
+          <button
+            onClick={onQuit}
+            style={{ fontFamily: 'VT323, monospace', fontSize: '1rem', color: '#888' }}
+          >
+            QUIT
+          </button>
+        </div>
       </div>
     </div>
   );

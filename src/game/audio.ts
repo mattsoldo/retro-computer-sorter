@@ -78,3 +78,48 @@ export function playUnlock() {
     setTimeout(() => playTone(f, 0.12, 'triangle', 0.18), i * 70);
   });
 }
+
+// ────────────────────── Text-to-speech ──────────────────────
+
+let voiceCacheReady = false;
+let cachedVoice: SpeechSynthesisVoice | null = null;
+
+function getRetroVoice(): SpeechSynthesisVoice | null {
+  if (voiceCacheReady) return cachedVoice;
+  if (typeof window === 'undefined' || !window.speechSynthesis) return null;
+  const voices = window.speechSynthesis.getVoices();
+  if (voices.length === 0) return null;
+  // Prefer voices that sound robotic/masculine — closest to War Games
+  const preferred = ['Microsoft David', 'Alex', 'Fred', 'Google UK English Male', 'Daniel'];
+  cachedVoice = preferred.reduce<SpeechSynthesisVoice | null>((found, name) => {
+    if (found) return found;
+    return voices.find(v => v.name.includes(name)) ?? null;
+  }, null) ?? voices[0] ?? null;
+  voiceCacheReady = true;
+  return cachedVoice;
+}
+
+// Prime voice cache when voices asynchronously become available (Chrome requirement)
+if (typeof window !== 'undefined' && window.speechSynthesis) {
+  window.speechSynthesis.onvoiceschanged = () => {
+    voiceCacheReady = false;
+    getRetroVoice();
+  };
+}
+
+/** Speak the spec in a low, slow retro-computer voice */
+export function speakSpec(specLabel: string, name: string, year: number) {
+  try {
+    if (typeof window === 'undefined' || !window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(`${specLabel}. ${name}. ${year}.`);
+    utterance.pitch = 0.1;
+    utterance.rate = 0.75;
+    utterance.volume = 0.9;
+    const voice = getRetroVoice();
+    if (voice) utterance.voice = voice;
+    window.speechSynthesis.speak(utterance);
+  } catch {
+    /* silently fail */
+  }
+}

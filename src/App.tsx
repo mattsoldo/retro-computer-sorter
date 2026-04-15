@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import StartScreen from './components/StartScreen';
 import GameScreen from './components/GameScreen';
+import GameOverScreen from './components/GameOverScreen';
 import HighScoreScreen from './components/HighScoreScreen';
 import './App.css';
 
-type Screen = 'start' | 'playing' | 'scores';
+type Screen = 'start' | 'playing' | 'gameOver' | 'scores';
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('start');
@@ -20,8 +21,14 @@ export default function App() {
       )}
       {screen === 'playing' && (
         <GameScreen
-          onGameOver={(score) => { setFinalScore(score); setScreen('scores'); }}
+          onGameOver={(score) => { setFinalScore(score); setScreen('gameOver'); }}
           onQuit={() => setScreen('start')}
+        />
+      )}
+      {screen === 'gameOver' && (
+        <GameOverScreen
+          score={finalScore}
+          onContinue={() => setScreen('scores')}
         />
       )}
       {screen === 'scores' && (

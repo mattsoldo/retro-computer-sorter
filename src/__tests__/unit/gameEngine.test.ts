@@ -91,7 +91,7 @@ describe('handleLanding — correct drop', () => {
     const firstScore = after1.score;
 
     // Land a second one
-    let s2 = spawnObject(after1);
+    const s2 = spawnObject(after1);
     s2.currentObject!.object = { ...s2.currentObject!.object, placeValue: sortedBins[0].placeValue };
     s2.currentObject!.column = 0;
     const after2 = handleLanding(s2);

@@ -23,6 +23,7 @@ export default function HighScoreScreen({ highlightScore = 0, onPlay, onBack }: 
   const [scores, setScores] = useState<HighScoreEntry[]>(() => loadHighScores());
   const [name, setName] = useState('');
   const [saved, setSaved] = useState(!qualifies);
+  const [highlightedIndex, setHighlightedIndex] = useState<number | null>(null);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -37,14 +38,12 @@ export default function HighScoreScreen({ highlightScore = 0, onPlay, onBack }: 
     e.preventDefault();
     const trimmed = (name || 'YOU').trim().toUpperCase().slice(0, 3) || 'YOU';
     const iso = new Date().toISOString().slice(0, 10);
-    const next = saveHighScore({ name: trimmed, score: highlightScore, date: iso });
+    const entry = { name: trimmed, score: highlightScore, date: iso };
+    const next = saveHighScore(entry);
     setScores(next);
+    setHighlightedIndex(next.findIndex(s => s === entry));
     setSaved(true);
   }
-
-  const playerEntry = qualifies && saved
-    ? scores.find(s => s.score === highlightScore)
-    : null;
 
   return (
     <div className="scores-screen">
@@ -74,7 +73,7 @@ export default function HighScoreScreen({ highlightScore = 0, onPlay, onBack }: 
 
       <div className="score-table">
         {scores.map((s, i) => {
-          const isPlayer = playerEntry && s === playerEntry;
+          const isPlayer = highlightedIndex === i;
           return (
             <div key={`${s.name}-${i}-${s.score}`} className={`score-row ${isPlayer ? 'highlight' : ''}`}>
               <div className="rank">{String(i + 1).padStart(2, '0')}</div>

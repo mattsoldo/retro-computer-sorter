@@ -203,7 +203,9 @@ export function handleLanding(state: GameState): GameState {
     bins: unlockedBins,
     currentObject: null,
     lastDropResult: isCorrect ? 'correct' : 'wrong',
-    lastDropTimer: 60,
+    // Correct drop: longer pause so the player can read the item card factoid.
+    // Wrong drop: short pause — no factoid, just respawn quickly.
+    lastDropTimer: isCorrect ? 180 : 60,
     status: newStatus,
   };
 }
