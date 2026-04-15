@@ -1,4 +1,4 @@
-import type { GameState, FallingObject, BinState, PlaceValueBin } from './types';
+import type { GameState, FallingObject, BinState, PlaceValueBin, SortedItemRecord } from './types';
 import { UNLOCK_TIERS, INITIAL_LIVES, INITIAL_FALL_SPEED, FAST_DROP_SPEED, SPEED_INCREMENT,
          CORRECT_PER_UNLOCK, SCORE_BASE, SCORE_COMBO_MULTIPLIER,
          BIN_HEIGHT, OBJECT_SIZE, FALL_AREA_HEIGHT,
@@ -33,6 +33,7 @@ export function createInitialState(): GameState {
     currentObject: null,
     lastDropResult: null,
     lastDropTimer: 0,
+    sortedItems: [],
   };
 }
 
@@ -162,11 +163,16 @@ export function handleLanding(state: GameState): GameState {
   let newLives = state.lives;
   let newCombo = state.combo;
   let newCorrect = state.totalCorrect;
+  let newSortedItems: SortedItemRecord[] = state.sortedItems;
 
   if (isCorrect) {
     newCombo += 1;
     newCorrect += 1;
     newScore += SCORE_BASE + (newCombo > 1 ? (newCombo - 1) * SCORE_COMBO_MULTIPLIER : 0);
+    newSortedItems = [
+      ...state.sortedItems,
+      { object: state.currentObject.object, bin: landedBin.placeValue },
+    ];
   } else {
     newLives -= 1;
     newCombo = 0;
@@ -202,6 +208,7 @@ export function handleLanding(state: GameState): GameState {
     totalCorrect: newCorrect,
     bins: unlockedBins,
     currentObject: null,
+    sortedItems: newSortedItems,
     lastDropResult: isCorrect ? 'correct' : 'wrong',
     // Correct drop: longer pause so the player can read the item card factoid.
     // Wrong drop: short pause — no factoid, just respawn quickly.

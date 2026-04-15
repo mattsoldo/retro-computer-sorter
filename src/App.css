@@ -414,21 +414,22 @@ canvas {
   position: relative; /* needed for ::after comma */
 }
 
-/* Large positional digit */
-.bin .bin-digit {
-  font-family: 'VT323', monospace;
-  font-size: clamp(1.6rem, 3vw, 2.6rem);
-  line-height: 1;
-  color: #fff;
-}
-
-/* Numeric place value — the key educational label */
+/* Numeric place value — now the PRIMARY label at the top of each bin */
 .bin .bin-place-label {
   font-family: 'VT323', monospace;
-  font-size: clamp(0.85rem, 1.6vw, 1.3rem);
+  font-size: clamp(1.1rem, 2vw, 1.75rem);
   line-height: 1;
   color: var(--arcade-amber);
   letter-spacing: 0.02em;
+  font-weight: bold;
+}
+
+/* Count digit — shown beneath the place label */
+.bin .bin-digit {
+  font-family: 'VT323', monospace;
+  font-size: clamp(1.4rem, 2.5vw, 2.2rem);
+  line-height: 1;
+  color: #fff;
 }
 
 /* Full name of the place ("Hundreds", "Thousands", etc.) */
@@ -446,7 +447,8 @@ canvas {
   content: ',';
   position: absolute;
   right: -9px;
-  bottom: 22px; /* align with bin-place-label row */
+  /* align with the digit row — sits below the place-label */
+  top: 42%;
   font-family: 'VT323', monospace;
   font-size: clamp(1.4rem, 2.5vw, 2rem);
   color: var(--arcade-amber);
@@ -597,4 +599,219 @@ canvas {
   .card-img { width: 80px; height: 64px; }
   .card-factoid { width: 100%; }
   .hud { grid-template-columns: repeat(2, 1fr); gap: 4px; }
+}
+
+/* ──────── Game Over: Announce Phase ──────── */
+.gameover-announce-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  width: 100%;
+  max-width: 620px;
+  text-align: center;
+  padding: 32px 24px;
+}
+
+.gameover-number-label {
+  font-family: 'VT323', monospace;
+  font-size: clamp(1.2rem, 2.5vw, 1.8rem);
+  color: #aaa;
+  letter-spacing: 0.08em;
+}
+
+.gameover-final-number {
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(2rem, 5vw, 3.6rem);
+  color: var(--phosphor);
+  text-shadow: 0 0 16px rgba(51,255,51,0.9), 0 0 36px rgba(51,255,51,0.5);
+  letter-spacing: 0.05em;
+  line-height: 1.2;
+  animation: numPulse 1.8s ease-in-out infinite;
+}
+
+@keyframes numPulse {
+  0%, 100% { text-shadow: 0 0 16px rgba(51,255,51,0.9), 0 0 36px rgba(51,255,51,0.5); }
+  50%       { text-shadow: 0 0 28px rgba(51,255,51,1),   0 0 56px rgba(51,255,51,0.7), 0 0 80px rgba(51,255,51,0.3); }
+}
+
+.gameover-score-line {
+  font-family: 'VT323', monospace;
+  font-size: clamp(1.1rem, 2vw, 1.5rem);
+  color: #bbb;
+}
+
+.gameover-score-value {
+  color: var(--arcade-amber);
+  font-size: 1.1em;
+}
+
+.gameover-hint {
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(0.45rem, 1vw, 0.7rem);
+  color: #555;
+  letter-spacing: 0.1em;
+  margin-top: 8px;
+  animation: blink 1.4s steps(2, end) infinite;
+}
+
+/* ──────── Game Over: Credits & Scores Phase ──────── */
+.gameover-credits-screen {
+  position: relative;
+  width: 100%;
+  max-width: 680px;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+.credits-inner {
+  width: 100%;
+  text-align: center;
+  padding: 20px 24px;
+  /* will-change set via JS transform */
+}
+
+.credits-title {
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(0.9rem, 2.2vw, 1.5rem);
+  color: var(--arcade-amber);
+  text-shadow: 0 0 10px var(--arcade-amber);
+  letter-spacing: 0.15em;
+  margin-bottom: 6px;
+  margin-top: 8px;
+}
+
+.credits-score-line {
+  font-family: 'VT323', monospace;
+  font-size: clamp(1.1rem, 2vw, 1.5rem);
+  color: #bbb;
+  margin-bottom: 28px;
+}
+
+.credits-score-value {
+  color: var(--phosphor);
+  font-size: 1.1em;
+}
+
+.credits-no-items {
+  font-family: 'VT323', monospace;
+  font-size: 1.3rem;
+  color: #555;
+  margin: 24px 0;
+}
+
+/* Each bin group in the credits */
+.credits-bin-group {
+  margin-bottom: 32px;
+}
+
+.credits-bin-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 12px;
+  border-bottom: 1px solid;
+  padding-bottom: 6px;
+  margin-bottom: 10px;
+  opacity: 0.9;
+}
+
+.credits-bin-place {
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(0.75rem, 1.8vw, 1.1rem);
+  letter-spacing: 0.06em;
+}
+
+.credits-bin-name {
+  font-family: 'VT323', monospace;
+  font-size: clamp(1.1rem, 2.2vw, 1.6rem);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.credits-bin-count {
+  font-family: 'VT323', monospace;
+  font-size: clamp(0.9rem, 1.8vw, 1.3rem);
+  color: #888;
+}
+
+.credits-item-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.credits-item-row {
+  display: grid;
+  grid-template-columns: 90px 1fr 60px;
+  gap: 8px;
+  align-items: baseline;
+  padding: 3px 8px;
+  font-family: 'VT323', monospace;
+  font-size: clamp(1rem, 2vw, 1.35rem);
+}
+
+.credits-item-spec {
+  color: var(--phosphor);
+  text-align: right;
+  font-size: 0.95em;
+}
+
+.credits-item-name {
+  color: #ddd;
+  text-align: left;
+}
+
+.credits-item-year {
+  color: #666;
+  text-align: right;
+  font-size: 0.9em;
+}
+
+/* The "number created" section */
+.credits-number-section {
+  margin: 40px 0 20px;
+  padding: 20px;
+  border: 2px solid rgba(51,255,51,0.3);
+  border-radius: 8px;
+  background: rgba(51,255,51,0.04);
+}
+
+.credits-number-label {
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(0.5rem, 1.2vw, 0.8rem);
+  color: #88ddaa;
+  letter-spacing: 0.15em;
+  margin-bottom: 10px;
+}
+
+.credits-final-number {
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(1.6rem, 4vw, 3rem);
+  color: var(--phosphor);
+  text-shadow: 0 0 16px rgba(51,255,51,0.8), 0 0 32px rgba(51,255,51,0.4);
+  letter-spacing: 0.05em;
+}
+
+/* High scores section inside credits */
+.credits-scores-section {
+  padding: 20px 0 20px;
+  border-top: 2px solid rgba(255,184,77,0.3);
+  margin-top: 20px;
+}
+
+.credits-your-score {
+  margin-bottom: 12px;
+  font-family: 'VT323', monospace;
+  font-size: clamp(1.1rem, 2.2vw, 1.5rem);
+}
+
+.credits-skip-hint {
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(0.4rem, 0.9vw, 0.6rem);
+  color: #444;
+  letter-spacing: 0.12em;
+  margin-top: 16px;
+  animation: blink 1.2s steps(2, end) infinite;
 }
