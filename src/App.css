@@ -243,6 +243,62 @@
   flex-direction: column;
   gap: 6px;
   max-height: calc(100dvh - 16px);
+  position: relative; /* anchor for level-up overlay */
+}
+
+/* ──────── Level-up overlay ──────── */
+.level-up-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 20;
+  animation: lvlFade 2.2s ease-out forwards;
+}
+
+.level-up-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 3px solid var(--arcade-amber);
+  border-radius: 12px;
+  padding: 18px 40px;
+  box-shadow: 0 0 40px rgba(255,184,77,0.6), inset 0 0 20px rgba(255,184,77,0.1);
+  animation: lvlPop 2.2s ease-out forwards;
+}
+
+.level-up-label {
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(1rem, 2.5vw, 1.6rem);
+  color: var(--arcade-amber);
+  text-shadow: 0 0 12px var(--arcade-amber), 3px 3px 0 #440;
+  letter-spacing: 0.15em;
+}
+
+.level-up-number {
+  font-family: 'VT323', monospace;
+  font-size: clamp(4rem, 10vw, 7rem);
+  color: #fff;
+  text-shadow: 0 0 20px var(--arcade-amber), 0 0 40px var(--arcade-amber);
+  line-height: 1;
+}
+
+@keyframes lvlFade {
+  0%   { opacity: 0; }
+  12%  { opacity: 1; }
+  65%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@keyframes lvlPop {
+  0%   { transform: scale(0.4) rotate(-4deg); }
+  18%  { transform: scale(1.1) rotate(1deg); }
+  28%  { transform: scale(1.0) rotate(0deg); }
+  100% { transform: scale(1.0) rotate(0deg); }
 }
 
 .hud {
@@ -361,17 +417,28 @@ canvas {
 /* Large positional digit */
 .bin .bin-digit {
   font-family: 'VT323', monospace;
-  font-size: clamp(1.8rem, 3.5vw, 2.8rem);
+  font-size: clamp(1.6rem, 3vw, 2.6rem);
   line-height: 1;
   color: #fff;
 }
 
-/* Short label below the digit */
+/* Numeric place value — the key educational label */
+.bin .bin-place-label {
+  font-family: 'VT323', monospace;
+  font-size: clamp(0.85rem, 1.6vw, 1.3rem);
+  line-height: 1;
+  color: var(--arcade-amber);
+  letter-spacing: 0.02em;
+}
+
+/* Full name of the place ("Hundreds", "Thousands", etc.) */
 .bin .bin-short {
   font-family: 'Press Start 2P', monospace;
-  font-size: clamp(0.3rem, 0.8vw, 0.5rem);
-  letter-spacing: 0.04em;
-  color: #aaa;
+  font-size: clamp(0.22rem, 0.55vw, 0.42rem);
+  letter-spacing: 0.03em;
+  color: #888;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 /* Comma separator after thousands / millions bin (doesn't affect layout) */
@@ -379,9 +446,9 @@ canvas {
   content: ',';
   position: absolute;
   right: -9px;
-  bottom: 4px;
+  bottom: 22px; /* align with bin-place-label row */
   font-family: 'VT323', monospace;
-  font-size: clamp(1.8rem, 3.5vw, 2.8rem);
+  font-size: clamp(1.4rem, 2.5vw, 2rem);
   color: var(--arcade-amber);
   line-height: 1;
   pointer-events: none;

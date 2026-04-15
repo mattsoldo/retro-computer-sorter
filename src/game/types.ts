@@ -15,7 +15,8 @@ export interface RetroObject {
   year: number;
   category: ObjectCategory;
   spec: number;          // the number shown to the player
-  specLabel: string;     // e.g. "65,536 bytes RAM"
+  specLabel: string;     // compact card label, e.g. "65,536 bytes RAM"
+  speech: string;        // natural-language unit for TTS, e.g. "number of bytes of RAM"
   placeValue: PlaceValueBin;
   factoid: string;       // fun fact shown after correct drop
   imageUrl?: string;     // Wikimedia Commons image for the spec panel

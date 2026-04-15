@@ -238,6 +238,7 @@ export default function GameScreen({ onGameOver, onQuit }: Props) {
   const prevLevelRef = useRef(1);
   const [overlayText, setOverlayText] = useState<{ text: string; kind: 'correct' | 'wrong'; id: number } | null>(null);
   const [cardItem, setCardItem] = useState<CardItem | null>(null);
+  const [levelUpText, setLevelUpText] = useState<{ level: number; id: number } | null>(null);
 
   // Spawn initial object
   useEffect(() => {
@@ -246,7 +247,7 @@ export default function GameScreen({ onGameOver, onQuit }: Props) {
       const obj = gameStateRef.current.currentObject?.object;
       if (obj) {
         setCardItem({ obj, factoidText: null });
-        speakSpec(obj.specLabel, obj.name, obj.year);
+        speakSpec(obj.spec, obj.name, obj.speech);
       }
       setDisplayState({ ...gameStateRef.current });
     }
@@ -372,6 +373,7 @@ export default function GameScreen({ onGameOver, onQuit }: Props) {
       // Level up detection
       if (next.level > prevLevelRef.current) {
         playLevelUp();
+        setLevelUpText({ level: next.level, id: Date.now() });
         prevLevelRef.current = next.level;
       }
 
@@ -387,7 +389,7 @@ export default function GameScreen({ onGameOver, onQuit }: Props) {
         const newObj = gameStateRef.current.currentObject?.object;
         if (newObj) {
           setCardItem({ obj: newObj, factoidText: null });
-          speakSpec(newObj.specLabel, newObj.name, newObj.year);
+          speakSpec(newObj.spec, newObj.name, newObj.speech);
         }
       }
 
@@ -425,6 +427,13 @@ export default function GameScreen({ onGameOver, onQuit }: Props) {
     const t = setTimeout(() => setOverlayText(null), 900);
     return () => clearTimeout(t);
   }, [overlayText]);
+
+  // Auto-clear level-up banner
+  useEffect(() => {
+    if (!levelUpText) return;
+    const t = setTimeout(() => setLevelUpText(null), 2200);
+    return () => clearTimeout(t);
+  }, [levelUpText]);
 
   const handleUnlock = useCallback(() => unlockAudio(), []);
 
@@ -469,7 +478,7 @@ export default function GameScreen({ onGameOver, onQuit }: Props) {
       </div>
 
       {/* ── Right: game main area ── */}
-      <div className="game-main">
+      <div className="game-main" style={{ position: 'relative' }}>
         <div className="hud">
           <div className="hud-item">
             <span className="hud-label">SCORE</span>
@@ -528,7 +537,8 @@ export default function GameScreen({ onGameOver, onQuit }: Props) {
                 aria-label={`${b.label} bin, count ${b.count}`}
               >
                 <div className="bin-digit">{b.count}</div>
-                <div className="bin-short">{b.shortLabel}</div>
+                <div className="bin-place-label">{def.placeLabel}</div>
+                <div className="bin-short">{b.label}</div>
               </div>
             );
           })}
@@ -543,6 +553,16 @@ export default function GameScreen({ onGameOver, onQuit }: Props) {
             QUIT
           </button>
         </div>
+
+        {/* Level-up overlay — covers game-main while animating out */}
+        {levelUpText && (
+          <div key={`lvl-${levelUpText.id}`} className="level-up-overlay">
+            <div className="level-up-inner">
+              <div className="level-up-label">LEVEL UP</div>
+              <div className="level-up-number">{levelUpText.level}</div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -18,17 +18,18 @@ export const SCORE_COMBO_MULTIPLIER = 50;
 export const BIN_DEFINITIONS: Record<PlaceValueBin, {
   label: string;
   shortLabel: string;
+  placeLabel: string;   // numeric place value shown on the bin: "1", "10", "1,000", etc.
   range: string;
   color: string;
   textColor: string;
 }> = {
-  ones:              { label: 'Ones',              shortLabel: '1s',    range: '1 – 9',             color: '#1a472a', textColor: '#90ee90' },
-  tens:              { label: 'Tens',              shortLabel: '10s',   range: '10 – 99',           color: '#1a3a6e', textColor: '#7ec8e3' },
-  hundreds:          { label: 'Hundreds',          shortLabel: '100s',  range: '100 – 999',         color: '#4a1a6e', textColor: '#d8a0ff' },
-  thousands:         { label: 'Thousands',         shortLabel: '1,000s',range: '1,000 – 9,999',     color: '#6e3a1a', textColor: '#ffbb88' },
-  'ten-thousands':   { label: 'Ten-Thousands',     shortLabel: '10Ks',  range: '10,000 – 99,999',   color: '#6e1a3a', textColor: '#ffaabb' },
-  'hundred-thousands':{ label: 'Hundred-Thousands',shortLabel: '100Ks', range: '100,000 – 999,999', color: '#1a5a5a', textColor: '#88ffee' },
-  millions:          { label: 'Millions',          shortLabel: '1Ms',   range: '1,000,000+',        color: '#5a5a00', textColor: '#ffff88' },
+  ones:              { label: 'Ones',              shortLabel: '1s',    placeLabel: '1',         range: '1 – 9',             color: '#1a472a', textColor: '#90ee90' },
+  tens:              { label: 'Tens',              shortLabel: '10s',   placeLabel: '10',        range: '10 – 99',           color: '#1a3a6e', textColor: '#7ec8e3' },
+  hundreds:          { label: 'Hundreds',          shortLabel: '100s',  placeLabel: '100',       range: '100 – 999',         color: '#4a1a6e', textColor: '#d8a0ff' },
+  thousands:         { label: 'Thousands',         shortLabel: '1,000s',placeLabel: '1,000',     range: '1,000 – 9,999',     color: '#6e3a1a', textColor: '#ffbb88' },
+  'ten-thousands':   { label: 'Ten-Thousands',     shortLabel: '10Ks',  placeLabel: '10,000',    range: '10,000 – 99,999',   color: '#6e1a3a', textColor: '#ffaabb' },
+  'hundred-thousands':{ label: 'Hundred-Thousands',shortLabel: '100Ks', placeLabel: '100,000',   range: '100,000 – 999,999', color: '#1a5a5a', textColor: '#88ffee' },
+  millions:          { label: 'Millions',          shortLabel: '1Ms',   placeLabel: '1,000,000', range: '1,000,000+',        color: '#5a5a00', textColor: '#ffff88' },
 };
 
 // Progressive unlock tiers

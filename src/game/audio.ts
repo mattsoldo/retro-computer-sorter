@@ -107,12 +107,16 @@ if (typeof window !== 'undefined' && window.speechSynthesis) {
   };
 }
 
-/** Speak the spec in a low, slow retro-computer voice */
-export function speakSpec(specLabel: string, name: string, year: number) {
+/** Speak the spec in a low, slow retro-computer voice.
+ *  Pattern: "[spec] was the [speech] in the [name]."
+ *  e.g. "2,300 was the number of transistors in the Intel 4004 CPU." */
+export function speakSpec(spec: number, name: string, speech: string) {
   try {
     if (typeof window === 'undefined' || !window.speechSynthesis) return;
     window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(`${specLabel}. ${name}. ${year}.`);
+    const utterance = new SpeechSynthesisUtterance(
+      `${spec.toLocaleString()} was the ${speech} in the ${name}.`
+    );
     utterance.pitch = 0.1;
     utterance.rate = 0.75;
     utterance.volume = 0.9;
