@@ -53,7 +53,7 @@ export function spawnObject(state: GameState, recentIds: string[] = []): GameSta
   const unlocked = getUnlockedBins(state);
   const object = pickNextObject(unlocked, recentIds);
   const sortedBins = getUnlockedBinsSorted(state);
-  const startColumn = Math.floor(sortedBins.length / 2);
+  const startColumn = Math.floor(Math.random() * sortedBins.length);
   const falling: FallingObject = {
     object,
     column: startColumn,
