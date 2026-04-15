@@ -216,6 +216,28 @@ function drawFallingObject(
   ctx.fillText(name, cx, y + OBJECT_SIZE - 12);
 }
 
+// ────────────────────── Tiny chip icon for bin counts ──────────────────────
+
+/** Pixel-art IC chip rendered at ~9×6px, inherits `currentColor`. */
+function TinyChip() {
+  return (
+    <svg width="9" height="6" viewBox="0 0 9 6" aria-hidden="true" style={{ display: 'block' }}>
+      {/* body */}
+      <rect x="2" y="0" width="5" height="6" rx="0.5" fill="currentColor" />
+      {/* left pins */}
+      <rect x="0" y="1" width="2" height="1" fill="currentColor" opacity="0.75" />
+      <rect x="0" y="4" width="2" height="1" fill="currentColor" opacity="0.75" />
+      {/* right pins */}
+      <rect x="7" y="1" width="2" height="1" fill="currentColor" opacity="0.75" />
+      <rect x="7" y="4" width="2" height="1" fill="currentColor" opacity="0.75" />
+      {/* center recess */}
+      <rect x="3" y="1.5" width="3" height="3" rx="0.5" fill="rgba(0,0,0,0.28)" />
+    </svg>
+  );
+}
+
+const MAX_BIN_ICONS = 15;
+
 // ────────────────────── GameScreen component ──────────────────────
 
 interface CardItem {
@@ -539,6 +561,16 @@ export default function GameScreen({ onGameOver, onQuit }: Props) {
                 <div className="bin-digit">{b.count}</div>
                 <div className="bin-place-label">{def.placeLabel}</div>
                 <div className="bin-short">{b.label}</div>
+                {b.count > 0 && (
+                  <div className="bin-icons" aria-hidden="true">
+                    {Array.from({ length: Math.min(b.count, MAX_BIN_ICONS) }).map((_, i) => (
+                      <TinyChip key={i} />
+                    ))}
+                    {b.count > MAX_BIN_ICONS && (
+                      <span className="bin-icon-overflow">+{b.count - MAX_BIN_ICONS}</span>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}
