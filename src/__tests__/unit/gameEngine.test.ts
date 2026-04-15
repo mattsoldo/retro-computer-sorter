@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   createInitialState, moveLeft, moveRight, spawnObject, handleLanding,
-  getUnlockedBinsSorted, setFastDrop, tick,
+  getAllBinsSorted, setFastDrop, tick,
 } from '../../game/gameEngine';
 import { CORRECT_PER_UNLOCK, INITIAL_LIVES } from '../../game/constants';
 import type { GameState } from '../../game/types';
@@ -29,14 +29,15 @@ describe('movement', () => {
   it('moveLeft clamps at 0', () => {
     let s = createInitialState();
     s = spawnObject(s);
-    s.currentObject!.column = 0;
+    const min = getAllBinsSorted(s).findIndex(b => b.unlocked);
+    s.currentObject!.column = min;
     s = moveLeft(s);
-    expect(s.currentObject!.column).toBe(0);
+    expect(s.currentObject!.column).toBe(min);
   });
   it('moveRight clamps at unlockedBins.length - 1', () => {
     let s = createInitialState();
     s = spawnObject(s);
-    const max = getUnlockedBinsSorted(s).length - 1;
+    const max = getAllBinsSorted(s).length - 1;
     s.currentObject!.column = max;
     s = moveRight(s);
     expect(s.currentObject!.column).toBe(max);
@@ -44,16 +45,16 @@ describe('movement', () => {
   it('moveLeft moves by 1', () => {
     let s = createInitialState();
     s = spawnObject(s);
-    s.currentObject!.column = 2;
+    s.currentObject!.column = 4;
     s = moveLeft(s);
-    expect(s.currentObject!.column).toBe(1);
+    expect(s.currentObject!.column).toBe(3);
   });
   it('moveRight moves by 1', () => {
     let s = createInitialState();
     s = spawnObject(s);
-    s.currentObject!.column = 0;
+    s.currentObject!.column = 3;
     s = moveRight(s);
-    expect(s.currentObject!.column).toBe(1);
+    expect(s.currentObject!.column).toBe(4);
   });
   it('no-ops when no current object', () => {
     const s = createInitialState();
@@ -67,12 +68,11 @@ describe('handleLanding — correct drop', () => {
   it('increases score and combo, keeps lives', () => {
     let s = createInitialState();
     s = spawnObject(s);
-    // Force the object to match the middle column (index 1 in tier 0 = 'thousands' since sort is hundreds/thousands/ten-thousands)
-    const sortedBins = getUnlockedBinsSorted(s);
-    const targetBin = sortedBins[1]; // 'thousands'
-    // Pick a known thousands object
+    const allBins = getAllBinsSorted(s);
+    const targetIndex = allBins.findIndex(b => b.placeValue === 'thousands');
+    const targetBin = allBins[targetIndex];
     s.currentObject!.object = { ...s.currentObject!.object, placeValue: targetBin.placeValue };
-    s.currentObject!.column = 1;
+    s.currentObject!.column = targetIndex;
     const after = handleLanding(s);
     expect(after.lives).toBe(INITIAL_LIVES);
     expect(after.combo).toBe(1);
@@ -84,18 +84,17 @@ describe('handleLanding — correct drop', () => {
   it('combo multiplier boosts score on subsequent correct drops', () => {
     let s = createInitialState();
     s = spawnObject(s);
-    const sortedBins = getUnlockedBinsSorted(s);
-    s.currentObject!.object = { ...s.currentObject!.object, placeValue: sortedBins[0].placeValue };
-    s.currentObject!.column = 0;
+    s.currentObject!.object = { ...s.currentObject!.object, placeValue: 'thousands' };
+    s.currentObject!.column = getAllBinsSorted(s).findIndex(b => b.placeValue === 'thousands');
     const after1 = handleLanding(s);
     const firstScore = after1.score;
 
     // Land a second one
     const s2 = spawnObject(after1);
-    s2.currentObject!.object = { ...s2.currentObject!.object, placeValue: sortedBins[0].placeValue };
-    s2.currentObject!.column = 0;
+    s2.currentObject!.object = { ...s2.currentObject!.object, placeValue: 'thousands' };
+    s2.currentObject!.column = getAllBinsSorted(s2).findIndex(b => b.placeValue === 'thousands');
     const after2 = handleLanding(s2);
-    expect(after2.score - firstScore).toBeGreaterThan(firstScore);
+    expect(after2.score - firstScore).toBeGreaterThan(100);
     expect(after2.combo).toBe(2);
   });
 });
@@ -104,10 +103,8 @@ describe('handleLanding — wrong drop', () => {
   it('decreases lives and resets combo', () => {
     let s = createInitialState();
     s = spawnObject(s);
-    const sortedBins = getUnlockedBinsSorted(s);
-    // Put object in wrong column
-    s.currentObject!.object = { ...s.currentObject!.object, placeValue: sortedBins[0].placeValue };
-    s.currentObject!.column = 1; // wrong column
+    s.currentObject!.object = { ...s.currentObject!.object, placeValue: 'thousands' };
+    s.currentObject!.column = getAllBinsSorted(s).findIndex(b => b.placeValue === 'hundreds');
     s.combo = 5;
     const after = handleLanding(s);
     expect(after.lives).toBe(INITIAL_LIVES - 1);
@@ -119,9 +116,8 @@ describe('handleLanding — wrong drop', () => {
     let s: GameState = createInitialState();
     s = { ...s, lives: 1 };
     s = spawnObject(s);
-    const sortedBins = getUnlockedBinsSorted(s);
-    s.currentObject!.object = { ...s.currentObject!.object, placeValue: sortedBins[0].placeValue };
-    s.currentObject!.column = 1; // wrong column
+    s.currentObject!.object = { ...s.currentObject!.object, placeValue: 'thousands' };
+    s.currentObject!.column = getAllBinsSorted(s).findIndex(b => b.placeValue === 'hundreds');
     const after = handleLanding(s);
     expect(after.lives).toBe(0);
     expect(after.status).toBe('gameOver');
@@ -129,33 +125,46 @@ describe('handleLanding — wrong drop', () => {
 });
 
 describe('unlocks', () => {
-  it('unlocks tier 1 after CORRECT_PER_UNLOCK correct drops', () => {
+  it('unlocks one new place-value column after CORRECT_PER_UNLOCK correct drops', () => {
     let s = createInitialState();
     // Simulate N correct drops
     for (let i = 0; i < CORRECT_PER_UNLOCK; i++) {
       s = spawnObject(s);
-      const sortedBins = getUnlockedBinsSorted(s);
-      s.currentObject!.object = { ...s.currentObject!.object, placeValue: sortedBins[0].placeValue };
-      s.currentObject!.column = 0;
+      s.currentObject!.object = { ...s.currentObject!.object, placeValue: 'thousands' };
+      s.currentObject!.column = getAllBinsSorted(s).findIndex(b => b.placeValue === 'thousands');
       s = handleLanding(s);
     }
     const unlocked = s.bins.filter(b => b.unlocked).map(b => b.placeValue).sort();
-    expect(unlocked).toContain('tens');
-    expect(unlocked).toContain('hundred-thousands');
+    expect(unlocked).toContain('ten-thousands');
+    expect(unlocked).not.toContain('hundred-thousands');
+    expect(s.level).toBe(2);
   });
 
-  it('unlocks tier 2 after 2 * CORRECT_PER_UNLOCK correct drops', () => {
+  it('unlocks the next column after 2 * CORRECT_PER_UNLOCK correct drops', () => {
     let s = createInitialState();
     for (let i = 0; i < CORRECT_PER_UNLOCK * 2; i++) {
       s = spawnObject(s);
-      const sortedBins = getUnlockedBinsSorted(s);
-      s.currentObject!.object = { ...s.currentObject!.object, placeValue: sortedBins[0].placeValue };
-      s.currentObject!.column = 0;
+      s.currentObject!.object = { ...s.currentObject!.object, placeValue: 'thousands' };
+      s.currentObject!.column = getAllBinsSorted(s).findIndex(b => b.placeValue === 'thousands');
       s = handleLanding(s);
     }
     const unlocked = s.bins.filter(b => b.unlocked).map(b => b.placeValue);
-    expect(unlocked).toContain('ones');
+    expect(unlocked).toContain('hundred-thousands');
+    expect(unlocked).not.toContain('millions');
+    expect(s.level).toBe(3);
+  });
+
+  it('unlocks millions after 3 * CORRECT_PER_UNLOCK correct drops', () => {
+    let s = createInitialState();
+    for (let i = 0; i < CORRECT_PER_UNLOCK * 3; i++) {
+      s = spawnObject(s);
+      s.currentObject!.object = { ...s.currentObject!.object, placeValue: 'thousands' };
+      s.currentObject!.column = getAllBinsSorted(s).findIndex(b => b.placeValue === 'thousands');
+      s = handleLanding(s);
+    }
+    const unlocked = s.bins.filter(b => b.unlocked).map(b => b.placeValue);
     expect(unlocked).toContain('millions');
+    expect(s.level).toBe(4);
   });
 });
 

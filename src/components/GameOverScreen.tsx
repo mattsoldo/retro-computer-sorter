@@ -1,9 +1,92 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { BinState, SortedItemRecord } from '../game/types';
 import { BIN_DEFINITIONS } from '../game/constants';
-import { speakFinalNumber } from '../game/audio';
+import { speakText } from '../game/audio';
 import { loadHighScores, saveHighScore, isHighScore } from '../game/highScores';
 import type { HighScoreEntry } from '../game/types';
+
+// ── Number-to-words helpers ──────────────────────────────────────────────────
+const ONES_WORDS = ['zero','one','two','three','four','five','six','seven','eight','nine'];
+const TEENS_WORDS = ['ten','eleven','twelve','thirteen','fourteen','fifteen','sixteen','seventeen','eighteen','nineteen'];
+const TENS_WORDS  = ['','','twenty','thirty','forty','fifty','sixty','seventy','eighty','ninety'];
+
+function threeDigitsToWords(n: number): string {
+  if (n <= 0) return '';
+  const h    = Math.floor(n / 100);
+  const rest = n % 100;
+  let result = '';
+  if (h > 0) result = ONES_WORDS[h] + ' hundred';
+  if (rest > 0) {
+    if (result) result += ' ';
+    if (rest < 10)       result += ONES_WORDS[rest];
+    else if (rest < 20)  result += TEENS_WORDS[rest - 10];
+    else {
+      const t = Math.floor(rest / 10);
+      const o = rest % 10;
+      result += TENS_WORDS[t];
+      if (o > 0) result += '-' + ONES_WORDS[o];
+    }
+  }
+  return result;
+}
+
+type AnnounceSegment = { groupId: string; label: string; positions: Set<number> };
+
+/** Build announcement segments for n. Each segment has digit positions (0 = ones). */
+function buildAnnounceSegments(n: number): AnnounceSegment[] {
+  if (n === 0) return [{ groupId: 'ones', label: 'zero', positions: new Set([0]) }];
+
+  const segs: AnnounceSegment[] = [];
+  const millionsPart   = Math.floor(n / 1_000_000);
+  const thousandsPart  = Math.floor((n % 1_000_000) / 1_000);
+  const hundredsDigit  = Math.floor((n % 1_000) / 100);
+  const tensDigit      = Math.floor((n % 100) / 10);
+  const onesDigit      = n % 10;
+
+  if (millionsPart > 0) {
+    segs.push({ groupId: 'millions', label: ONES_WORDS[millionsPart] + ' million', positions: new Set([6]) });
+  }
+
+  if (thousandsPart > 0) {
+    const ts = String(thousandsPart);
+    const pos = new Set<number>();
+    for (let i = 0; i < ts.length; i++) pos.add(3 + ts.length - 1 - i);
+    segs.push({ groupId: 'thousands', label: threeDigitsToWords(thousandsPart) + ' thousand', positions: pos });
+  }
+
+  if (hundredsDigit > 0) {
+    segs.push({ groupId: 'hundreds', label: ONES_WORDS[hundredsDigit] + ' hundred', positions: new Set([2]) });
+  }
+
+  if (tensDigit === 1) {
+    // treat as a teen (10–19)
+    segs.push({ groupId: 'teens', label: TEENS_WORDS[onesDigit], positions: new Set([0, 1]) });
+  } else {
+    if (tensDigit > 0) {
+      segs.push({ groupId: 'tens', label: TENS_WORDS[tensDigit], positions: new Set([1]) });
+    }
+    if (onesDigit > 0) {
+      segs.push({ groupId: 'ones', label: ONES_WORDS[onesDigit], positions: new Set([0]) });
+    }
+  }
+
+  return segs;
+}
+
+/** Map each character of n.toLocaleString() to a groupId (or null for commas). */
+function buildCharGroupMap(n: number, segs: AnnounceSegment[]): (string | null)[] {
+  const str = n.toLocaleString();
+  const posToGroup = new Map<number, string>();
+  for (const seg of segs) for (const p of seg.positions) posToGroup.set(p, seg.groupId);
+
+  const totalDigits = str.replace(/,/g, '').length;
+  let digitIdx = 0;
+  return [...str].map(ch => {
+    if (ch === ',') return null;
+    const pos = totalDigits - 1 - digitIdx++;
+    return posToGroup.get(pos) ?? 'inactive';
+  });
+}
 
 // Place values for computing the final number
 const PLACE_VALUES: Record<string, number> = {
@@ -59,6 +142,11 @@ export default function GameOverScreen({ score, bins, sortedItems, onPlay, onBac
   // ── High scores state (used in scores phase) ──
   const finalNumber = useMemo(() => computeFinalNumber(bins), [bins]);
   const qualifies = useMemo(() => score > 0 && isHighScore(score), [score]);
+
+  // ── Digit-by-digit announce state ──
+  const announceSegments = useMemo(() => buildAnnounceSegments(finalNumber), [finalNumber]);
+  const charGroupMap     = useMemo(() => buildCharGroupMap(finalNumber, announceSegments), [finalNumber, announceSegments]);
+  const [announceStep, setAnnounceStep] = useState<number>(-1); // -1 = not started
   const [scores, setScores] = useState<HighScoreEntry[]>(() => loadHighScores());
   const [name, setName] = useState('');
   const [saved, setSaved] = useState(!qualifies);
@@ -71,14 +159,39 @@ export default function GameOverScreen({ score, bins, sortedItems, onPlay, onBac
   const rafRef = useRef(0);
   const skipRef = useRef(false); // set true to jump to end immediately
 
-  // ── Phase 1: speak the number on mount ──
+  // ── Phase 1a: kick off the announce sequence after a short pause ──
   useEffect(() => {
     if (phase !== 'announce') return;
-    speakFinalNumber(finalNumber);
-    // Auto-advance to credits after 3.5 s (enough time for voice to finish)
-    const t = setTimeout(() => setPhase('credits'), 3500);
+    const t = setTimeout(() => setAnnounceStep(0), 700);
     return () => clearTimeout(t);
-  }, [phase, finalNumber]);
+  }, [phase]);
+
+  // ── Phase 1b: speak the current segment; advance on completion ──
+  useEffect(() => {
+    if (phase !== 'announce' || announceStep < 0) return;
+
+    // All segments done — pause, then move on
+    if (announceStep >= announceSegments.length) {
+      const t = setTimeout(() => setPhase('credits'), 800);
+      return () => clearTimeout(t);
+    }
+
+    let cancelled = false;
+    const label = announceSegments[announceStep].label;
+    const advance = () => { if (!cancelled) { cancelled = true; setAnnounceStep(s => s + 1); } };
+
+    speakText(label, advance);
+
+    // Fallback: advance after estimated speech duration in case onend never fires
+    const estimatedMs = Math.max(1800, label.split(' ').length * 900);
+    const fallback = setTimeout(advance, estimatedMs);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(fallback);
+      window.speechSynthesis?.cancel();
+    };
+  }, [phase, announceStep, announceSegments]);
 
   // ── Keyboard handler: skip / advance ──
   useEffect(() => {
@@ -86,7 +199,11 @@ export default function GameOverScreen({ score, bins, sortedItems, onPlay, onBac
       if (['Enter', ' ', 'ArrowDown'].includes(e.key)) {
         e.preventDefault();
         if (phase === 'announce') {
-          setPhase('credits');
+          // Advance to next segment; if at the end skip straight to credits
+          setAnnounceStep(s => {
+            const next = s + 1;
+            return next; // useEffect will transition to credits when next >= segments.length
+          });
         } else if (phase === 'credits') {
           skipRef.current = true; // triggers jump to end in the RAF loop
         } else if (phase === 'scores') {
@@ -187,15 +304,44 @@ export default function GameOverScreen({ score, bins, sortedItems, onPlay, onBac
 
   // ── Announce phase ──
   if (phase === 'announce') {
+    const activeGroupId = (announceStep >= 0 && announceStep < announceSegments.length)
+      ? announceSegments[announceStep].groupId
+      : null;
+    const currentLabel = activeGroupId ? announceSegments[announceStep].label : '';
+    const numberStr = finalNumber.toLocaleString();
+
     return (
       <div className="gameover-announce-screen">
         <div className="gameover-banner">GAME OVER</div>
         <div className="gameover-number-label">Your sorting work created</div>
-        <div className="gameover-final-number">{finalNumber.toLocaleString()}</div>
+
+        <div className="announce-number-display">
+          {[...numberStr].map((ch, i) => {
+            const groupId = charGroupMap[i];
+            if (groupId === null) {
+              return (
+                <span key={i} className={`announce-comma${activeGroupId !== null ? ' dim' : ''}`}>,</span>
+              );
+            }
+            const isActive = groupId === activeGroupId;
+            const isDim    = activeGroupId !== null && !isActive;
+            return (
+              <span
+                key={i}
+                className={`announce-digit${isActive ? ' active' : isDim ? ' dim' : ''}`}
+              >
+                {ch}
+              </span>
+            );
+          })}
+        </div>
+
+        <div className="announce-current-label">{currentLabel || '\u00A0'}</div>
+
         <div className="gameover-score-line">
           Score: <span className="gameover-score-value">{score.toLocaleString()}</span>
         </div>
-        <div className="gameover-hint">PRESS ENTER or wait to see your sorted items</div>
+        <div className="gameover-hint">PRESS ENTER to skip ahead</div>
       </div>
     );
   }

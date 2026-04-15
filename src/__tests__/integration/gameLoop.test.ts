@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createInitialState, spawnObject, tick, getUnlockedBinsSorted, moveLeft } from '../../game/gameEngine';
+import { createInitialState, spawnObject, tick, getAllBinsSorted, moveLeft } from '../../game/gameEngine';
 import { FALL_AREA_HEIGHT, OBJECT_SIZE } from '../../game/constants';
 
 describe('gameLoop', () => {
@@ -12,10 +12,8 @@ describe('gameLoop', () => {
   it('object falls and eventually lands', () => {
     let s = createInitialState();
     s = spawnObject(s);
-    // Force object to match leftmost bin so landing is "correct"
-    const sorted = getUnlockedBinsSorted(s);
-    s.currentObject!.object = { ...s.currentObject!.object, placeValue: sorted[0].placeValue };
-    s.currentObject!.column = 0;
+    s.currentObject!.object = { ...s.currentObject!.object, placeValue: 'thousands' };
+    s.currentObject!.column = getAllBinsSorted(s).findIndex(b => b.placeValue === 'thousands');
     for (let i = 0; i < 2000; i++) {
       s = tick(s, 16);
       if (s.currentObject === null) break;
@@ -28,11 +26,8 @@ describe('gameLoop', () => {
   it('landing in wrong column yields wrong result', () => {
     let s = createInitialState();
     s = spawnObject(s);
-    const sorted = getUnlockedBinsSorted(s);
-    // Object matches column 0 bin
-    s.currentObject!.object = { ...s.currentObject!.object, placeValue: sorted[0].placeValue };
-    // Move to column 1 (wrong)
-    s.currentObject!.column = 1;
+    s.currentObject!.object = { ...s.currentObject!.object, placeValue: 'thousands' };
+    s.currentObject!.column = getAllBinsSorted(s).findIndex(b => b.placeValue === 'hundreds');
     for (let i = 0; i < 2000; i++) {
       s = tick(s, 16);
       if (s.currentObject === null) break;
@@ -46,15 +41,15 @@ describe('gameLoop', () => {
     s = spawnObject(s);
     const colBefore = s.currentObject!.column;
     s = moveLeft(s);
-    expect(s.currentObject!.column).toBe(Math.max(0, colBefore - 1));
+    const min = getAllBinsSorted(s).findIndex(b => b.unlocked);
+    expect(s.currentObject!.column).toBe(Math.max(min, colBefore - 1));
   });
 
   it('object y exceeds FALL_AREA_HEIGHT - OBJECT_SIZE on landing frame', () => {
     let s = createInitialState();
     s = spawnObject(s);
-    const sorted = getUnlockedBinsSorted(s);
-    s.currentObject!.object = { ...s.currentObject!.object, placeValue: sorted[0].placeValue };
-    s.currentObject!.column = 0;
+    s.currentObject!.object = { ...s.currentObject!.object, placeValue: 'thousands' };
+    s.currentObject!.column = getAllBinsSorted(s).findIndex(b => b.placeValue === 'thousands');
     let lastY = s.currentObject!.y;
     for (let i = 0; i < 2000; i++) {
       if (!s.currentObject) break;

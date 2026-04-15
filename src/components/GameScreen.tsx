@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   createInitialState, spawnObject, tick, moveLeft, moveRight,
-  setFastDrop, getUnlockedBinsSorted,
+  setFastDrop, getUnlockedBinsSorted, getAllBinsSorted,
 } from '../game/gameEngine';
 import type { GameState, RetroObject, BinState, SortedItemRecord } from '../game/types';
 import {
@@ -11,7 +11,7 @@ import {
 import { formatSpec } from '../game/placeValue';
 import {
   playCorrect, playWrong, playCombo, playLevelUp, playGameOver, playUnlock, unlockAudio,
-  speakSpec,
+  speakSpec, speakText,
 } from '../game/audio';
 
 interface Props {
@@ -49,12 +49,37 @@ function drawBackground(ctx: CanvasRenderingContext2D, stars: Star[]) {
 
 function drawColumns(
   ctx: CanvasRenderingContext2D,
-  unlockedCount: number,
+  allBins: { unlocked: boolean; placeValue: string }[],
   activeColumn: number,
 ) {
-  const colWidth = CANVAS_WIDTH / unlockedCount;
-  for (let i = 0; i < unlockedCount; i++) {
-    if (i === activeColumn) {
+  const colWidth = CANVAS_WIDTH / allBins.length;
+  for (let i = 0; i < allBins.length; i++) {
+    const bin = allBins[i];
+    if (!bin.unlocked) {
+      // Locked column: dark overlay + subtle diagonal hatching
+      ctx.fillStyle = 'rgba(0,0,0,0.72)';
+      ctx.fillRect(i * colWidth, 0, colWidth, FALL_AREA_HEIGHT);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(i * colWidth, 0, colWidth, FALL_AREA_HEIGHT);
+      ctx.clip();
+      ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+      ctx.lineWidth = 1;
+      const spacing = 14;
+      for (let d = -FALL_AREA_HEIGHT; d < colWidth + FALL_AREA_HEIGHT; d += spacing) {
+        ctx.beginPath();
+        ctx.moveTo(i * colWidth + d, 0);
+        ctx.lineTo(i * colWidth + d + FALL_AREA_HEIGHT, FALL_AREA_HEIGHT);
+        ctx.stroke();
+      }
+      ctx.restore();
+      // Subtle place-value tint
+      const pv = bin.placeValue as keyof typeof BIN_DEFINITIONS;
+      ctx.fillStyle = BIN_DEFINITIONS[pv].textColor;
+      ctx.globalAlpha = 0.04;
+      ctx.fillRect(i * colWidth, 0, colWidth, FALL_AREA_HEIGHT);
+      ctx.globalAlpha = 1;
+    } else if (i === activeColumn) {
       ctx.fillStyle = 'rgba(255,255,255,0.05)';
       ctx.fillRect(i * colWidth, 0, colWidth, FALL_AREA_HEIGHT);
     }
@@ -71,14 +96,14 @@ function drawColumns(
 
 function drawLandingZone(
   ctx: CanvasRenderingContext2D,
-  bins: { placeValue: string }[],
+  bins: { placeValue: string; unlocked: boolean }[],
 ) {
   const colWidth = CANVAS_WIDTH / bins.length;
   for (let i = 0; i < bins.length; i++) {
     const pv = bins[i].placeValue as keyof typeof BIN_DEFINITIONS;
     const def = BIN_DEFINITIONS[pv];
     ctx.fillStyle = def.textColor;
-    ctx.globalAlpha = 0.7;
+    ctx.globalAlpha = bins[i].unlocked ? 0.7 : 0.12;
     ctx.fillRect(i * colWidth + 2, FALL_AREA_HEIGHT - 3, colWidth - 4, 3);
     ctx.globalAlpha = 1;
   }
@@ -245,8 +270,33 @@ interface CardItem {
   factoidText: string | null;
 }
 
+interface GameOverReveal {
+  finalNumber: number;
+  score: number;
+  bins: BinState[];
+  sortedItems: SortedItemRecord[];
+}
+
+const PLACE_VALUES: Record<BinState['placeValue'], number> = {
+  ones: 1,
+  tens: 10,
+  hundreds: 100,
+  thousands: 1_000,
+  'ten-thousands': 10_000,
+  'hundred-thousands': 100_000,
+  millions: 1_000_000,
+};
+
+function computeFinalNumber(bins: BinState[]): number {
+  return bins.reduce((sum, bin) => sum + bin.count * PLACE_VALUES[bin.placeValue], 0);
+}
+
+function buildInitialScreenState(): GameState {
+  return spawnObject(createInitialState(), []);
+}
+
 export default function GameScreen({ onGameOver, onQuit }: Props) {
-  const [displayState, setDisplayState] = useState<GameState>(() => createInitialState());
+  const [displayState, setDisplayState] = useState<GameState>(() => buildInitialScreenState());
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const starsRef = useRef<Star[]>(generateStars(90));
   const gameStateRef = useRef<GameState>(displayState);
@@ -257,27 +307,50 @@ export default function GameScreen({ onGameOver, onQuit }: Props) {
   const prevUnlockedCountRef = useRef(
     getUnlockedBinsSorted(displayState).length,
   );
-  const prevLevelRef = useRef(1);
   const [overlayText, setOverlayText] = useState<{ text: string; kind: 'correct' | 'wrong'; id: number } | null>(null);
-  const [cardItem, setCardItem] = useState<CardItem | null>(null);
-  const [levelUpText, setLevelUpText] = useState<{ level: number; id: number } | null>(null);
+  const [cardItem, setCardItem] = useState<CardItem | null>(() => {
+    const obj = displayState.currentObject?.object;
+    return obj ? { obj, factoidText: null } : null;
+  });
+  const [unlockPopup, setUnlockPopup] = useState<{ bins: BinState[]; level: number } | null>(null);
+  const [gameOverReveal, setGameOverReveal] = useState<GameOverReveal | null>(null);
+  const unlockPopupRef = useRef(false); // pauses physics while popup is visible
+  const gameOverRevealRef = useRef<GameOverReveal | null>(null);
 
-  // Spawn initial object
+  // Announce initial object
   useEffect(() => {
-    if (!gameStateRef.current.currentObject) {
-      gameStateRef.current = spawnObject(gameStateRef.current, recentIdsRef.current);
-      const obj = gameStateRef.current.currentObject?.object;
-      if (obj) {
-        setCardItem({ obj, factoidText: null });
-        speakSpec(obj.spec, obj.name, obj.speech);
-      }
-      setDisplayState({ ...gameStateRef.current });
+    const obj = gameStateRef.current.currentObject?.object;
+    if (obj) {
+      speakSpec(obj.spec, obj.name, obj.speech);
     }
+  }, []);
+
+  const dismissUnlockPopup = useCallback(() => {
+    setUnlockPopup(null);
+    unlockPopupRef.current = false;
   }, []);
 
   // Keyboard input — move immediately on keydown, then key-repeat via rAF while held
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
+      if (gameOverRevealRef.current && !['Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) {
+        e.preventDefault();
+        const reveal = gameOverRevealRef.current;
+        gameOverRevealRef.current = null;
+        setGameOverReveal(null);
+        onGameOver(reveal.score, reveal.bins, reveal.sortedItems);
+        return;
+      }
+
+      // Unlock popup only advances on Enter. Ignore all other keys while it is open.
+      if (unlockPopupRef.current) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          dismissUnlockPopup();
+        }
+        return;
+      }
+
       if (['ArrowLeft', 'ArrowRight', 'ArrowDown', ' '].includes(e.key)) {
         e.preventDefault();
       }
@@ -327,7 +400,7 @@ export default function GameScreen({ onGameOver, onQuit }: Props) {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
     };
-  }, [onQuit]);
+  }, [dismissUnlockPopup, onGameOver, onQuit]);
 
   // Main rAF loop
   useEffect(() => {
@@ -351,9 +424,11 @@ export default function GameScreen({ onGameOver, onQuit }: Props) {
         lastMoveFrameRef.current.right = f;
       }
 
-      // Physics
+      // Physics — frozen while unlock popup is visible
       const prev = gameStateRef.current;
-      gameStateRef.current = tick(prev, delta);
+      if (!unlockPopupRef.current && !gameOverRevealRef.current) {
+        gameStateRef.current = tick(prev, delta);
+      }
       const next = gameStateRef.current;
 
       // Landing detection — prev had currentObject, next does not
@@ -380,23 +455,18 @@ export default function GameScreen({ onGameOver, onQuit }: Props) {
         }
       }
 
-      // Unlock detection
+      // Unlock detection — unlocking a new place-value column is also the level-up moment.
       const unlockedNow = getUnlockedBinsSorted(next).length;
       if (unlockedNow > prevUnlockedCountRef.current) {
         playUnlock();
-        setOverlayText({
-          text: 'NEW BIN UNLOCKED!',
-          kind: 'correct',
-          id: Date.now(),
-        });
-        prevUnlockedCountRef.current = unlockedNow;
-      }
-
-      // Level up detection
-      if (next.level > prevLevelRef.current) {
         playLevelUp();
-        setLevelUpText({ level: next.level, id: Date.now() });
-        prevLevelRef.current = next.level;
+        const newlyUnlocked = next.bins.filter(b => {
+          const was = prev.bins.find(pb => pb.placeValue === b.placeValue);
+          return b.unlocked && was && !was.unlocked;
+        });
+        setUnlockPopup({ bins: newlyUnlocked, level: next.level });
+        unlockPopupRef.current = true;
+        prevUnlockedCountRef.current = unlockedNow;
       }
 
       // Game over
@@ -404,7 +474,17 @@ export default function GameScreen({ onGameOver, onQuit }: Props) {
         playGameOver();
         const finalBins = [...next.bins];
         const finalSorted = [...next.sortedItems];
-        setTimeout(() => onGameOver(next.score, finalBins, finalSorted), 1200);
+        const reveal = {
+          finalNumber: computeFinalNumber(finalBins),
+          score: next.score,
+          bins: finalBins,
+          sortedItems: finalSorted,
+        };
+        gameOverRevealRef.current = reveal;
+        setGameOverReveal(reveal);
+        setTimeout(() => {
+          speakText(`Your sorting work created the number ${reveal.finalNumber.toLocaleString()}.`);
+        }, 600);
       }
 
       // Spawn next object if needed (small delay for flash)
@@ -423,12 +503,12 @@ export default function GameScreen({ onGameOver, onQuit }: Props) {
         const ctx = canvas.getContext('2d');
         if (ctx) {
           drawBackground(ctx, starsRef.current);
-          const sortedBins = getUnlockedBinsSorted(gameStateRef.current);
+          const allBins = getAllBinsSorted(gameStateRef.current);
           const obj = gameStateRef.current.currentObject;
-          drawColumns(ctx, sortedBins.length, obj?.column ?? 0);
-          drawLandingZone(ctx, sortedBins);
+          drawColumns(ctx, allBins, obj?.column ?? -1);
+          drawLandingZone(ctx, allBins);
           if (obj) {
-            const colWidth = CANVAS_WIDTH / sortedBins.length;
+            const colWidth = CANVAS_WIDTH / allBins.length;
             drawFallingObject(ctx, colWidth, obj.column, obj.y, obj.object);
           }
         }
@@ -452,24 +532,25 @@ export default function GameScreen({ onGameOver, onQuit }: Props) {
     return () => clearTimeout(t);
   }, [overlayText]);
 
-  // Auto-clear level-up banner
-  useEffect(() => {
-    if (!levelUpText) return;
-    const t = setTimeout(() => setLevelUpText(null), 2200);
-    return () => clearTimeout(t);
-  }, [levelUpText]);
-
   const handleUnlock = useCallback(() => unlockAudio(), []);
+
+  const continueAfterGameOverReveal = useCallback(() => {
+    const reveal = gameOverRevealRef.current;
+    if (!reveal) return;
+    gameOverRevealRef.current = null;
+    setGameOverReveal(null);
+    onGameOver(reveal.score, reveal.bins, reveal.sortedItems);
+  }, [onGameOver]);
 
   const heartsFilled = '♥'.repeat(Math.max(0, displayState.lives));
   const heartsEmpty  = '♡'.repeat(Math.max(0, 3 - displayState.lives));
 
-  // Unlocked bins in display order (millions → ones), used for the bin row
-  const sortedUnlocked = useMemo(() => getUnlockedBinsSorted(displayState), [displayState]);
+  // All 7 bins in display order — used for the bin row (locked ones shown dimmed)
+  const allBinsSorted = useMemo(() => getAllBinsSorted(displayState), [displayState]);
 
-  // Target place value for active-target highlight
+  // Target place value for active-target highlight (column is all-bins index)
   const targetPlaceValue = displayState.currentObject
-    ? sortedUnlocked[displayState.currentObject.column]?.placeValue
+    ? allBinsSorted[displayState.currentObject.column]?.placeValue
     : null;
 
   return (
@@ -538,32 +619,36 @@ export default function GameScreen({ onGameOver, onQuit }: Props) {
           )}
         </div>
 
-        {/* Bin row — only unlocked bins, displayed as a positional number */}
+        {/* Bin row — all bins, locked ones shown dimmed */}
         <div className="bins">
-          {sortedUnlocked.map((b, idx) => {
+          {allBinsSorted.map((b, idx) => {
             const def = BIN_DEFINITIONS[b.placeValue];
             const isTarget = b.placeValue === targetPlaceValue;
-            const flash = b.flashTimer && b.flashTimer > 0
+            const flash = b.unlocked && b.flashTimer && b.flashTimer > 0
               ? (b.lastResult === 'correct' ? 'flash-correct' : 'flash-wrong')
               : '';
-            // Show comma after 'thousands' and 'millions' bins (if there are more bins to the right)
+            // Show comma after 'thousands' and 'millions' if more bins follow
             const showComma = (b.placeValue === 'thousands' || b.placeValue === 'millions')
-              && idx < sortedUnlocked.length - 1;
+              && idx < allBinsSorted.length - 1;
             return (
               <div
                 key={b.placeValue}
-                className={`bin ${flash} ${isTarget ? 'active-target' : ''} ${showComma ? 'bin-after-comma' : ''}`}
+                className={`bin ${b.unlocked ? '' : 'bin-locked'} ${flash} ${isTarget ? 'active-target' : ''} ${showComma ? 'bin-after-comma' : ''}`}
                 style={{
                   background: def.color,
                   color: def.textColor,
                   borderColor: def.textColor,
                 }}
-                aria-label={`${b.label} bin, count ${b.count}`}
+                aria-label={b.unlocked ? `${b.label} bin, count ${b.count}` : `${b.label} bin, locked`}
               >
                 <div className="bin-place-label">{def.placeLabel}</div>
-                <div className="bin-digit">{b.count}</div>
+                {b.unlocked ? (
+                  <div className="bin-digit">{b.count}</div>
+                ) : (
+                  <div className="bin-locked-badge">LOCKED</div>
+                )}
                 <div className="bin-short">{b.label}</div>
-                {b.count > 0 && (
+                {b.unlocked && b.count > 0 && (
                   <div className="bin-icons" aria-hidden="true">
                     {Array.from({ length: Math.min(b.count, MAX_BIN_ICONS) }).map((_, i) => (
                       <TinyChip key={i} />
@@ -588,16 +673,59 @@ export default function GameScreen({ onGameOver, onQuit }: Props) {
           </button>
         </div>
 
-        {/* Level-up overlay — covers game-main while animating out */}
-        {levelUpText && (
-          <div key={`lvl-${levelUpText.id}`} className="level-up-overlay">
-            <div className="level-up-inner">
-              <div className="level-up-label">LEVEL UP</div>
-              <div className="level-up-number">{levelUpText.level}</div>
-            </div>
-          </div>
-        )}
       </div>
+
+      {/* Unlock popup — modal over the full game screen */}
+      {unlockPopup && (
+        <div className="unlock-popup-overlay">
+          <div className="unlock-popup" role="dialog" aria-modal="true" aria-labelledby="unlock-popup-title">
+            <div id="unlock-popup-title" className="unlock-popup-title">★ LEVEL {unlockPopup.level} • NEW PLACE VALUE! ★</div>
+            <div className="unlock-popup-bins">
+              {unlockPopup.bins.map(bin => {
+                const def = BIN_DEFINITIONS[bin.placeValue];
+                return (
+                  <div
+                    key={bin.placeValue}
+                    className="unlock-popup-bin"
+                    style={{ borderColor: def.textColor, background: def.color }}
+                  >
+                    <div className="unlock-popup-place" style={{ color: def.textColor }}>
+                      {def.placeLabel}
+                    </div>
+                    <div className="unlock-popup-name" style={{ color: def.textColor }}>
+                      {def.label}
+                    </div>
+                    <div className="unlock-popup-range">{def.range}</div>
+                    <div className="unlock-popup-example">
+                      e.g. <span style={{ color: def.textColor }}>{def.example}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="arcade-btn primary unlock-popup-btn" aria-hidden="true">
+              PRESS ENTER
+            </div>
+            <div className="unlock-popup-hint">press Enter to continue</div>
+          </div>
+        </div>
+      )}
+
+      {gameOverReveal && (
+        <div className="game-screen-final-overlay" onClick={continueAfterGameOverReveal}>
+          <div className="game-screen-final-popup" onClick={e => e.stopPropagation()}>
+            <div className="game-screen-final-title">YOUR NUMBER</div>
+            <div className="game-screen-final-number">{gameOverReveal.finalNumber.toLocaleString()}</div>
+            <div className="game-screen-final-copy">
+              The bins on screen make this number.
+            </div>
+            <button className="arcade-btn primary" onClick={continueAfterGameOverReveal}>
+              CONTINUE
+            </button>
+            <div className="unlock-popup-hint">press any key to continue</div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

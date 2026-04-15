@@ -49,12 +49,23 @@ export function getUnlockedBinsSorted(state: GameState): BinState[] {
     .filter(b => b?.unlocked);
 }
 
-/** Spawn a new object at a random column */
+/** All 7 bins in display order (millions → ones), regardless of lock state.
+ *  Column index in FallingObject always refers to this array's indices. */
+export function getAllBinsSorted(state: GameState): BinState[] {
+  const ORDER: PlaceValueBin[] = ['millions','hundred-thousands','ten-thousands','thousands','hundreds','tens','ones'];
+  return ORDER.map(pv => state.bins.find(b => b.placeValue === pv)!);
+}
+
+/** Spawn a new object at a random column within the unlocked range.
+ *  column is now an index into getAllBinsSorted (0 = millions, 6 = ones). */
 export function spawnObject(state: GameState, recentIds: string[] = []): GameState {
   const unlocked = getUnlockedBins(state);
   const object = pickNextObject(unlocked, recentIds);
-  const sortedBins = getUnlockedBinsSorted(state);
-  const startColumn = Math.floor(Math.random() * sortedBins.length);
+  const allBins = getAllBinsSorted(state);
+  const firstUnlocked = allBins.findIndex(b => b.unlocked);
+  const lastUnlocked  = allBins.length - 1; // ones is always last & always unlocked
+  const range = lastUnlocked - firstUnlocked + 1;
+  const startColumn = firstUnlocked + Math.floor(Math.random() * range);
   const falling: FallingObject = {
     object,
     column: startColumn,
@@ -64,10 +75,11 @@ export function spawnObject(state: GameState, recentIds: string[] = []): GameSta
   return { ...state, currentObject: falling };
 }
 
-/** Move left — clamps to 0 */
+/** Move left — clamps to leftmost unlocked bin */
 export function moveLeft(state: GameState): GameState {
   if (!state.currentObject) return state;
-  const min = 0;
+  const allBins = getAllBinsSorted(state);
+  const min = allBins.findIndex(b => b.unlocked);
   return {
     ...state,
     currentObject: {
@@ -77,10 +89,10 @@ export function moveLeft(state: GameState): GameState {
   };
 }
 
-/** Move right — clamps to unlocked bin count - 1 */
+/** Move right — clamps to rightmost bin (ones, always index 6) */
 export function moveRight(state: GameState): GameState {
   if (!state.currentObject) return state;
-  const max = getUnlockedBinsSorted(state).length - 1;
+  const max = getAllBinsSorted(state).length - 1;
   return {
     ...state,
     currentObject: {
@@ -155,8 +167,8 @@ export function tick(state: GameState, deltaMs: number): GameState {
 export function handleLanding(state: GameState): GameState {
   if (!state.currentObject) return state;
 
-  const sortedBins = getUnlockedBinsSorted(state);
-  const landedBin = sortedBins[state.currentObject.column];
+  // column is an all-bins index (0 = millions … 6 = ones)
+  const landedBin = getAllBinsSorted(state)[state.currentObject.column];
   const isCorrect = landedBin?.placeValue === state.currentObject.object.placeValue;
 
   let newScore = state.score;
@@ -194,8 +206,8 @@ export function handleLanding(state: GameState): GameState {
   // Check unlocks
   const unlockedBins = checkUnlocks(newBins, newCorrect);
 
-  // Level progression
-  const newLevel = Math.floor(newCorrect / 10) + 1;
+  // Level progression is tied to place-value unlocks.
+  const newLevel = getLevelForBins(unlockedBins);
 
   const newStatus = newLives <= 0 ? 'gameOver' : 'playing';
 
@@ -218,11 +230,19 @@ export function handleLanding(state: GameState): GameState {
 }
 
 function checkUnlocks(bins: BinState[], totalCorrect: number): BinState[] {
-  const newBins = [...bins];
-  let tier = 0;
-  for (let i = 0; i < UNLOCK_TIERS.length; i++) {
-    if (totalCorrect >= i * CORRECT_PER_UNLOCK) tier = i;
-  }
-  const allUnlocked = new Set(UNLOCK_TIERS.slice(0, tier + 1).flat());
-  return newBins.map(b => ({ ...b, unlocked: allUnlocked.has(b.placeValue) }));
+  const unlockSteps = UNLOCK_TIERS.slice(1).flat();
+  const unlockedExtraCount = Math.min(
+    unlockSteps.length,
+    Math.floor(totalCorrect / CORRECT_PER_UNLOCK),
+  );
+  const allUnlocked = new Set([
+    ...UNLOCK_TIERS[0],
+    ...unlockSteps.slice(0, unlockedExtraCount),
+  ]);
+  return bins.map(b => ({ ...b, unlocked: allUnlocked.has(b.placeValue) }));
+}
+
+function getLevelForBins(bins: BinState[]): number {
+  const unlockedCount = bins.filter(b => b.unlocked).length;
+  return unlockedCount - UNLOCK_TIERS[0].length + 1;
 }
