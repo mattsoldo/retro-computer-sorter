@@ -1,0 +1,91 @@
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap');
+
+:root {
+  --bg-deep:     #0a0a1a;
+  --bg-mid:      #12122a;
+  --bg-panel:    #1a1a3a;
+  --fg:          #e0e0e0;
+  --phosphor:    #33ff33;
+  --arcade-red:  #ff4d4d;
+  --arcade-blue: #4dc8ff;
+  --arcade-amber:#ffb84d;
+  --arcade-pink: #ff66cc;
+  font-family: 'VT323', 'Courier New', monospace;
+  line-height: 1.2;
+  font-weight: 400;
+  color-scheme: dark;
+  color: var(--fg);
+  background-color: var(--bg-deep);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background:
+    radial-gradient(ellipse at top, #1a1a40 0%, transparent 60%),
+    radial-gradient(ellipse at bottom, #201040 0%, transparent 60%),
+    var(--bg-deep);
+  overflow-x: hidden;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+button {
+  font-family: 'Press Start 2P', 'Courier New', monospace;
+  cursor: pointer;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: inherit;
+}
+
+button:focus-visible {
+  outline: 2px solid var(--phosphor);
+  outline-offset: 4px;
+}
+
+h1, h2, h3 {
+  font-family: 'Press Start 2P', 'Courier New', monospace;
+  letter-spacing: 0.05em;
+  margin: 0;
+}
+
+/* Global scanline overlay */
+.scanlines::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0,0,0,0.25) 0px,
+    rgba(0,0,0,0.25) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  pointer-events: none;
+  z-index: 9999;
+  mix-blend-mode: multiply;
+}
+
+/* Subtle CRT vignette */
+.scanlines::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(
+    ellipse at center,
+    transparent 40%,
+    rgba(0,0,0,0.55) 100%
+  );
+  pointer-events: none;
+  z-index: 9998;
+}
