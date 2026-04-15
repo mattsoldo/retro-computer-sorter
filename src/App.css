@@ -582,6 +582,226 @@ canvas {
   text-transform: uppercase;
 }
 
+/* ──────── Credits Screen ──────── */
+.credits-screen {
+  position: relative;
+  width: 100%;
+  min-height: 100dvh;
+  max-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+/* Phase 1 — Lucky number reveal */
+.credits-reveal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  animation: creditsRevealFade 3.5s ease-out forwards;
+  text-align: center;
+  padding: 0 24px;
+}
+
+@keyframes creditsRevealFade {
+  0%   { opacity: 0; transform: scale(0.85); }
+  15%  { opacity: 1; transform: scale(1.05); }
+  30%  { opacity: 1; transform: scale(1.0); }
+  80%  { opacity: 1; transform: scale(1.0); }
+  100% { opacity: 0; transform: scale(1.0); }
+}
+
+.credits-reveal-label {
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(0.65rem, 1.8vw, 1rem);
+  color: var(--arcade-amber);
+  letter-spacing: 0.2em;
+  text-shadow: 0 0 10px var(--arcade-amber);
+}
+
+.credits-reveal-number {
+  font-family: 'VT323', monospace;
+  font-size: clamp(4rem, 14vw, 9rem);
+  color: var(--phosphor);
+  text-shadow:
+    0 0 8px var(--phosphor),
+    0 0 24px var(--phosphor),
+    0 0 48px rgba(51,255,51,0.4);
+  line-height: 1;
+}
+
+.credits-reveal-sub {
+  font-family: 'VT323', monospace;
+  font-size: clamp(1rem, 2.5vw, 1.5rem);
+  color: #888;
+}
+
+/* Phase 2 — Scrolling credits */
+.credits-viewport {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.credits-roll {
+  position: absolute;
+  width: 100%;
+  top: 0;
+  /* Start below the screen, animate to above the screen */
+  transform: translateY(100vh);
+  animation: creditsScroll linear forwards;
+  text-align: center;
+  padding: 0 24px 80px;
+  box-sizing: border-box;
+}
+
+@keyframes creditsScroll {
+  from { transform: translateY(100vh); }
+  to   { transform: translateY(-100%); }
+}
+
+.credits-title-card {
+  padding: 60px 0 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.credits-title-heading {
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(0.55rem, 1.6vw, 0.9rem);
+  color: var(--arcade-amber);
+  letter-spacing: 0.18em;
+  text-shadow: 0 0 8px var(--arcade-amber);
+}
+
+.credits-title-number {
+  font-family: 'VT323', monospace;
+  font-size: clamp(3.5rem, 12vw, 7rem);
+  color: var(--phosphor);
+  text-shadow:
+    0 0 8px var(--phosphor),
+    0 0 20px var(--phosphor),
+    0 0 40px rgba(51,255,51,0.4);
+  line-height: 1;
+}
+
+.credits-title-score {
+  font-family: 'VT323', monospace;
+  font-size: clamp(1.1rem, 2.5vw, 1.6rem);
+  color: #888;
+}
+
+.credits-title-score span {
+  color: var(--arcade-amber);
+}
+
+.credits-divider {
+  font-family: 'VT323', monospace;
+  font-size: 1.4rem;
+  color: #444;
+  letter-spacing: 0.4em;
+  margin: 28px 0;
+}
+
+.credits-section-intro {
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(0.5rem, 1.4vw, 0.8rem);
+  color: #666;
+  letter-spacing: 0.2em;
+  margin-bottom: 8px;
+}
+
+.credits-bin-group {
+  margin: 36px 0;
+}
+
+.credits-bin-header {
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(0.55rem, 1.5vw, 0.85rem);
+  letter-spacing: 0.15em;
+  margin-bottom: 16px;
+}
+
+.credits-bin-range {
+  font-family: 'VT323', monospace;
+  font-size: clamp(0.9rem, 2vw, 1.3rem);
+  opacity: 0.7;
+  letter-spacing: 0.05em;
+}
+
+.credits-items {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.credits-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+  gap: 8px;
+}
+
+.credits-item-name {
+  font-family: 'VT323', monospace;
+  font-size: clamp(1.3rem, 3.5vw, 2rem);
+  color: #e0e0e0;
+}
+
+.credits-item-year {
+  font-family: 'VT323', monospace;
+  font-size: clamp(0.9rem, 2vw, 1.3rem);
+  color: #666;
+}
+
+.credits-item-spec {
+  font-family: 'VT323', monospace;
+  font-size: clamp(0.85rem, 1.8vw, 1.2rem);
+  color: #555;
+}
+
+.credits-empty {
+  font-family: 'VT323', monospace;
+  font-size: 1.4rem;
+  color: #444;
+  margin: 40px 0;
+}
+
+.credits-fin {
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(0.55rem, 1.5vw, 0.85rem);
+  color: var(--arcade-pink);
+  letter-spacing: 0.18em;
+  text-shadow: 0 0 10px var(--arcade-pink);
+  margin: 20px 0;
+}
+
+.credits-spacer {
+  height: 60px;
+}
+
+.credits-skip {
+  position: fixed;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(0.4rem, 1vw, 0.6rem);
+  color: #444;
+  letter-spacing: 0.15em;
+  animation: blink 1.4s steps(2, end) infinite;
+  pointer-events: none;
+  z-index: 10;
+}
+
 @media (max-width: 760px) {
   .game-screen { flex-direction: column; align-items: center; }
   .item-card {

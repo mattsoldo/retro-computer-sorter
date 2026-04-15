@@ -35,6 +35,7 @@ export interface BinState {
   shortLabel: string;    // "100s"
   range: string;         // "100 – 999"
   count: number;
+  sortedItems: RetroObject[];  // correctly-sorted items that landed here
   unlocked: boolean;
   lastResult?: 'correct' | 'wrong'; // for flash animation
   flashTimer?: number;

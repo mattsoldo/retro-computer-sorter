@@ -16,6 +16,7 @@ function buildInitialBins(): BinState[] {
     shortLabel: BIN_DEFINITIONS[pv].shortLabel,
     range: BIN_DEFINITIONS[pv].range,
     count: 0,
+    sortedItems: [],
     unlocked: startUnlocked.has(pv),
   }));
 }
@@ -172,12 +173,14 @@ export function handleLanding(state: GameState): GameState {
     newCombo = 0;
   }
 
-  // Update bin counts
+  // Update bin counts and track correctly-sorted items
+  const droppedObj = state.currentObject.object;
   const newBins = state.bins.map(b => {
     if (b.placeValue === landedBin?.placeValue) {
       return {
         ...b,
         count: isCorrect ? b.count + 1 : b.count,
+        sortedItems: isCorrect ? [...b.sortedItems, droppedObj] : b.sortedItems,
         lastResult: (isCorrect ? 'correct' : 'wrong') as 'correct' | 'wrong',
         flashTimer: 45,
       };
