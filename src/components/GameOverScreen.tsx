@@ -122,7 +122,6 @@ export default function GameOverScreen({ score, bins, sortedItems, onPlay, onBac
       // Skip key pressed — jump directly to showing scores
       if (skipRef.current) {
         skipRef.current = false;
-        inner.style.transform = '';
         setPhase('scores');
         return;
       }
@@ -150,6 +149,16 @@ export default function GameOverScreen({ score, bins, sortedItems, onPlay, onBac
       running = false;
       cancelAnimationFrame(rafRef.current);
     };
+  }, [phase]);
+
+  // ── Ensure scores section is visible whenever we enter scores phase ──
+  // Covers: normal animation end, skip (Enter), and direct jump (Escape from announce)
+  useEffect(() => {
+    if (phase !== 'scores') return;
+    const inner = innerRef.current;
+    const scoresEl = scoresRef.current;
+    if (!inner || !scoresEl) return;
+    inner.style.transform = `translateY(${-scoresEl.offsetTop}px)`;
   }, [phase]);
 
   // ── Save high score ──
